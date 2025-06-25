@@ -2,6 +2,8 @@ const BaseAgent = require('../BaseAgent');
 const OptionChainService = require('../../../services/optionChain/OptionChainService');
 const AIService = require('../../../services/ai/AIService');
 const { calculateOptionMetrics } = require('../../../utils/optionMath');
+const { calculateExpectedNifty } = require('../tools/niftyDownsideTool');
+const { generateWithTools } = require('../tools/generateWithTools');
 
 class OptionsAgent extends BaseAgent {
   constructor() {
@@ -38,55 +40,150 @@ class OptionsAgent extends BaseAgent {
   }
 
   /**
-   * Process the message and enhance it with option chain data
+   * Extract expected percentage downfall or expected Nifty value from user message
+   * Returns: { expectedPercentage, expectedNiftyValue }
    */
-  async processMessage(message, sessionId) {
-    const optionRequest = this.isOptionChainRequest(message);
-    if (!optionRequest.isOptionChainRequest) {
-      console.log(`📋 OptionsAgent: No option data needed for this message`);
-      return message;
+  extractDownsideExpectation(message) {
+    // Look for patterns like 'downfall of 2%', 'down 2%', 'fall by 2%', etc.
+    const percentMatch = message.match(/(?:downfall|down|fall|drop)[^\d]{0,10}(\d{1,3}(?:\.\d{1,2})?)\s*%/i);
+    if (percentMatch) {
+      return { expectedPercentage: parseFloat(percentMatch[1]) };
     }
-    // Only handle general option chain queries, not strategy/hedging
-    console.log(`📊 OptionsAgent: Fetching option data for ${optionRequest.symbol}`);
-    try {
-      const optionData = await this.optionChainService.getOptionChain(optionRequest.symbol);
-      const formattedData = this.optionChainService.formatFirstOptionOnly(optionData);
-      console.log(`✅ OptionsAgent: Successfully formatted option data for ${optionRequest.symbol}`);
-      const enhancedMessage = `${message}\n\nHere's a sample from the latest option chain data:\n${formattedData}\n\nPlease analyze and explain this data in a helpful way. Note that this is just one option from the full chain for demonstration purposes.`;
-      return enhancedMessage;
-    } catch (error) {
-      console.error(`❌ OptionsAgent: Failed to fetch option data for ${optionRequest.symbol}:`, error.message);
-      const errorMessage = `${message}\n\nI'm sorry, I'm currently unable to fetch live option chain data due to a technical issue. However, I can still help you understand options trading concepts, strategies, and answer any questions you have about options!`;
-      return errorMessage;
+    // Look for direct Nifty value: 'expect nifty at 21000', 'nifty to 21000', etc.
+    const niftyValueMatch = message.match(/nifty[^\d]{0,10}(\d{4,6})/i);
+    if (niftyValueMatch) {
+      return { expectedNiftyValue: parseFloat(niftyValueMatch[1]) };
     }
+    return {};
   }
 
   /**
-   * Generate AI response with options-specific context and tools
+   * Tool schema for AI tool-calling (downside calculator)
+   */
+  getDownsideToolSchema(optionData) {
+    return {
+      name: 'calculateExpectedNifty',
+      description: 'Calculate expected Nifty50 value based on user-estimated percentage downfall or direct value, and return the current Nifty50 value. Use this tool if the user mentions a percentage drop or a target Nifty value.',
+      parameters: {
+        type: 'object',
+        properties: {
+          optionChain: {
+            type: 'object',
+            description: 'The option chain data for Nifty50 (JSON object, must include current value as underlyingValue or records.underlyingValue)'
+          },
+          expectedPercentage: {
+            type: 'number',
+            description: 'The expected percentage downfall in Nifty50 (e.g., 2 for 2%)',
+          },
+          expectedNiftyValue: {
+            type: 'number',
+            description: 'The expected Nifty50 value (if provided directly by the user)',
+          }
+        },
+        required: ['optionChain']
+      }
+    };
+  }
+
+  /**
+   * Generate AI response with tool-calling for downside calculation (now generic)
+   * Always returns an async iterable for streaming compatibility.
    */
   async generateResponse(message, sessionId) {
-    console.log(`🎯 OptionsAgent: Starting response generation for session: ${sessionId}`);
-    
     try {
-      // First process the message to add any option chain data
-      const processedMessage = await this.processMessage(message, sessionId);
-      
-      // Create messages array with system prompt and processed message
+      const optionRequest = this.isOptionChainRequest(message);
+      let optionData = null;
+      let formattedData = '';
+      if (optionRequest.isOptionChainRequest) {
+        optionData = await this.optionChainService.getOptionChain(optionRequest.symbol);
+        formattedData = this.optionChainService.formatFirstOptionOnly(optionData);
+      }
+      // Prepare tool schema
+      const tools = [this.getDownsideToolSchema(optionData)];
+      // Detect if tool should be called and extract params
+      let toolCalls = [];
+      const percentMatch = message.match(/(\d{1,3}(?:\.\d{1,2})?)\s*%/);
+      const valueMatch = message.match(/nifty[^\d]{0,10}(\d{4,6})/i);
+      let expectedPercentage = percentMatch ? parseFloat(percentMatch[1]) : undefined;
+      let expectedNiftyValue = valueMatch ? parseFloat(valueMatch[1]) : undefined;
+      if ((expectedPercentage || expectedNiftyValue) && optionData) {
+        toolCalls.push({
+          toolName: 'calculateExpectedNifty',
+          args: {
+            optionChain: optionData,
+            expectedPercentage,
+            expectedNiftyValue
+          }
+        });
+      }
+      // Prepare messages
+      const systemPrompt = this.systemPrompt;
+      let userContent = message;
+      if (formattedData) {
+        userContent += `\n\nHere's a sample from the latest option chain data:\n${formattedData}\nIf you need to estimate downside, use the tool.`;
+      }
       const messages = [
-        { role: 'system', content: this.systemPrompt },
-        { role: 'user', content: processedMessage }
+        { role: 'system', content: systemPrompt },
+        { role: 'user', content: userContent }
       ];
-
-      console.log(`🤖 OptionsAgent: Calling AI service for response generation`);
+      // Call global generateWithTools (generic)
+      const { aiResponse, toolResults } = await generateWithTools({
+        messages,
+        tools,
+        toolImpls: { calculateExpectedNifty },
+        toolCalls,
+        aiService: this.aiService,
+        temperature: 0.7,
+        maxTokens: 800
+      });
       
-      // Generate streaming response using the AI service
-      const result = await this.aiService.generateStreamingResponse(messages);
+      // Format tool result for user if present
+      let toolResultText = '';
+      if (toolResults.calculateExpectedNifty) {
+        const result = toolResults.calculateExpectedNifty;
+        if (result.error) {
+          toolResultText = `\n\n⚠️ Could not calculate expected Nifty50: ${result.error}`;
+        } else {
+          toolResultText = `\n\n📉 Downside Tool Result:\n- Current Nifty50: ${result.currentNifty}\n- Expected Nifty50: ${result.expectedNifty}`;
+        }
+      }
       
-      console.log(`✅ OptionsAgent: Successfully generated streaming response`);
-      return result;
+      // aiResponse is the full streaming response object from AI service (has textStream property)
+      
+      // If no tool result, just return the AI response object directly (it has textStream)
+      if (!toolResultText) {
+        return aiResponse;
+      }
+      
+      // If there is a tool result, stream both AI and tool result
+      async function* streamWithToolResult() {
+        try {
+          // aiResponse.textStream is the actual text stream
+          for await (const chunk of aiResponse.textStream) {
+            yield chunk;
+          }
+        } catch (err) {
+          console.log('[OptionsAgent] Error streaming AI response:', err);
+          yield '[Error streaming AI response]';
+        }
+        if (toolResultText) {
+          yield toolResultText;
+        }
+      }
+      const finalStream = streamWithToolResult();
+      
+      // Return in the same format as AIService.generateStreamingResponse (with textStream property)
+      return {
+        textStream: finalStream
+      };
     } catch (error) {
-      console.error(`❌ OptionsAgent: Error generating response:`, error.message);
-      throw error;
+      // Always return an object with textStream property for consistency
+      async function* errorStream() {
+        yield `❌ OptionsAgent Error: ${error.message || error}`;
+      }
+      return {
+        textStream: errorStream()
+      };
     }
   }
 
@@ -130,6 +227,10 @@ You are an expert Options Trading Assistant specializing in Indian equity deriva
 - Highlight that options trading involves significant risk
 - Suggest position sizing and stop-loss strategies
 - Recommend consulting with financial advisors for major decisions
+
+⚒️ TOOL USAGE:
+- If the user asks for a downside estimate (percentage drop or target Nifty value), use the available tool to calculate the expected Nifty50 value and always mention the current Nifty50 value.
+- Use the tool whenever you need to perform such calculations, and clearly present the tool's results in your response.
 
 Your responses should be informative, practical, and help traders make better-informed decisions while maintaining responsible trading practices.
 `;
