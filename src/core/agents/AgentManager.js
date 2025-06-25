@@ -1,5 +1,6 @@
 const OptionsAgent = require('./specialized/OptionsAgent');
 const GeneralFinanceAgent = require('./specialized/GeneralFinanceAgent');
+//const BearPutSpreadAgent = require('./specialized/BearPutSpreadAgent');
 const AIService = require('../../services/ai/AIService');
 
 class AgentManager {
@@ -16,6 +17,7 @@ class AgentManager {
   initializeAgents() {
     // Add specialized agents
     this.agents.push(new OptionsAgent());
+    //this.agents.push(new BearPutSpreadAgent());
     this.agents.push(new GeneralFinanceAgent());
     
     console.log(`✅ Initialized ${this.agents.length} agents:`, 
@@ -33,7 +35,7 @@ Available Agents:
 2. GeneralFinanceAgent - Handles general finance questions, stock market basics, investment advice, portfolio management, fundamental analysis, technical analysis, market trends, financial planning
 
 Your task is to analyze the user's message and respond with ONLY the name of the most appropriate agent:
-- Respond with "OptionsAgent" for options-related queries
+- Respond with "OptionsAgent" for general options-related queries
 - Respond with "GeneralFinanceAgent" for general finance queries
 
 Consider keywords, context, and intent. Be precise in your selection.
