@@ -377,7 +377,9 @@
         const chatInput = document.getElementById('chatInput');
         const sendButton = document.getElementById('sendButton');
         const typingIndicator = document.getElementById('typingIndicator');
-        const sessionId = 'user-' + Date.now();        function addMessage(content, isUser = false) {
+        const sessionId = 'user-' + Date.now();
+
+        function addMessage(content, isUser = false) {
             const messageDiv = document.createElement('div');
             messageDiv.className = `message ${isUser ? 'user-message' : 'assistant-message'}`;
             

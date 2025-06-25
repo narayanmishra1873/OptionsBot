@@ -1,13 +1,13 @@
 {
-  "name": "minimalist-ai-chatbot",
-  "version": "1.0.0",
-  "description": "A minimalist AI chatbot with web interface using AI SDK",
-  "main": "index.js",
+  "name": "optionsbot-multi-agent",
+  "version": "2.0.0",
+  "description": "A multi-agent AI system for options trading and financial analysis using AI SDK",
+  "main": "src/index.js",
   "scripts": {
-    "start": "node index.js",
-    "dev": "nodemon index.js"
+    "start": "node src/index.js",
+    "dev": "nodemon src/index.js"
   },
-  "keywords": ["ai", "chatbot", "ai-sdk", "openai", "web"],
+  "keywords": ["ai", "chatbot", "ai-sdk", "openai", "options", "trading", "multi-agent", "finance"],
   "author": "",
   "license": "MIT",
   "dependencies": {
