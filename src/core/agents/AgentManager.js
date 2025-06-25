@@ -45,6 +45,8 @@ Respond with ONLY the agent name, nothing else.`;
    * Use AI to intelligently select the best agent
    */
   async selectAgent(message) {
+    console.log(`🔍 AgentManager: Selecting agent for message: "${message.substring(0, 50)}..."`);
+    
     try {
       const messages = [
         { role: 'system', content: this.systemPrompt },
@@ -54,24 +56,27 @@ Respond with ONLY the agent name, nothing else.`;
       const selectedAgentName = await this.aiService.generateResponse(messages);
       const trimmedName = selectedAgentName.trim();
       
+      console.log(`🎯 AgentManager: AI suggested agent: ${trimmedName}`);
+      
       // Find the agent by name
       const selectedAgent = this.agents.find(agent => 
         agent.name === trimmedName && agent.isActive
       );
 
       if (selectedAgent) {
-        console.log(`🤖 AI selected agent: ${selectedAgent.name} for message: "${message.substring(0, 50)}..."`);
+        console.log(`✅ AgentManager: Successfully selected ${selectedAgent.name}`);
         return selectedAgent;
       }
 
       // Fallback to default agent if AI selection fails
-      console.log(`⚠️ AI selection failed or agent not found. Using GeneralFinanceAgent as fallback.`);
+      console.log(`⚠️ AgentManager: Agent '${trimmedName}' not found or inactive. Using GeneralFinanceAgent as fallback.`);
       return this.agents.find(agent => agent.name === 'GeneralFinanceAgent') || this.agents[0];
       
     } catch (error) {
-      console.error('Error in AI agent selection:', error);
-      // Fallback to GeneralFinanceAgent
-      return this.agents.find(agent => agent.name === 'GeneralFinanceAgent') || this.agents[0];
+      console.error('❌ AgentManager: Error in AI agent selection:', error.message);
+      const fallbackAgent = this.agents.find(agent => agent.name === 'GeneralFinanceAgent') || this.agents[0];
+      console.log(`🔄 AgentManager: Using fallback agent: ${fallbackAgent?.name}`);
+      return fallbackAgent;
     }
   }
 
@@ -79,20 +84,32 @@ Respond with ONLY the agent name, nothing else.`;
    * Process a message using the appropriate agent
    */
   async processMessage(message, sessionId = 'default') {
+    console.log(`📨 AgentManager: Processing message for session: ${sessionId}`);
+    
     const selectedAgent = await this.selectAgent(message);
     
     if (!selectedAgent) {
+      console.error('❌ AgentManager: No agent available to handle message');
       throw new Error('No agent available to handle this message');
     }
 
-    // Let the agent generate its own response
-    const agentResponse = await selectedAgent.generateResponse(message, sessionId);
+    console.log(`🚀 AgentManager: Delegating to ${selectedAgent.name} for response generation`);
     
-    return {
-      agent: selectedAgent.name,
-      response: agentResponse,
-      originalMessage: message
-    };
+    try {
+      // Let the agent generate its own response
+      const agentResponse = await selectedAgent.generateResponse(message, sessionId);
+      
+      console.log(`✅ AgentManager: Successfully got response from ${selectedAgent.name}`);
+      
+      return {
+        agent: selectedAgent.name,
+        response: agentResponse,
+        originalMessage: message
+      };
+    } catch (error) {
+      console.error(`❌ AgentManager: Error getting response from ${selectedAgent.name}:`, error.message);
+      throw error;
+    }
   }
 
   /**

@@ -469,6 +469,38 @@ class OptionChainService {
     }
 
     /**
+     * Format only the first option from the chain (for testing purposes)
+     * @param {Object} optionChainData - The complete option chain data
+     * @returns {string} - Formatted string with just the first option
+     */
+    formatFirstOptionOnly(optionChainData) {
+        const { symbol, underlyingValue, currentExpiry, atmStrike, optionData } = optionChainData;
+        
+        if (!optionData || optionData.length === 0) {
+            return `No option data available for ${symbol}`;
+        }
+
+        // Get the first option from the chain
+        const firstOption = optionData[0];
+        const { strikePrice, call, put } = firstOption;
+        
+        // Simple formatted output
+        let formatted = `📊 ${symbol} Sample Option Data\n\n`;
+        formatted += `💰 Underlying Price: ₹${underlyingValue.toLocaleString()}\n`;
+        formatted += `📅 Expiry: ${new Date(currentExpiry).toLocaleDateString('en-GB')}\n`;
+        formatted += `🎯 ATM Strike: ₹${atmStrike.toLocaleString()}\n`;
+        formatted += `⏰ Updated: ${new Date().toLocaleTimeString()}\n\n`;
+        
+        formatted += `📈 Strike ₹${strikePrice}:\n`;
+        formatted += `• Call: ₹${call.lastPrice?.toFixed(2) || 0} (Vol: ${call.volume?.toLocaleString() || 0})\n`;
+        formatted += `• Put: ₹${put.lastPrice?.toFixed(2) || 0} (Vol: ${put.volume?.toLocaleString() || 0})\n\n`;
+        
+        formatted += `Note: This is sample data for testing. Full chain available in production.\n`;
+        
+        return formatted;
+    }
+
+    /**
      * Checks if the user message is requesting option chain data
      * @param {string} message - User message
      * @returns {Object} - { isOptionChainRequest: boolean, symbol?: string }

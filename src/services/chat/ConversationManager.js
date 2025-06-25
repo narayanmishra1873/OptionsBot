@@ -27,6 +27,8 @@ class ConversationManager {
     // Add the new message
     messages.push({ role, content, timestamp: new Date().toISOString() });
     
+    console.log(`💾 ConversationManager: Added ${role} message to session: ${sessionId} (total: ${messages.length})`);
+    
     // Trim conversation if it gets too long
     this.trimConversation(sessionId);
     
@@ -68,7 +70,13 @@ class ConversationManager {
    * Clear conversation history for a session
    */
   clearConversation(sessionId) {
+    const existed = this.conversations.has(sessionId);
     this.conversations.delete(sessionId);
+    
+    if (existed) {
+      console.log(`🗑️ ConversationManager: Cleared conversation for session: ${sessionId}`);
+    }
+    
     return true;
   }
 

@@ -1,15 +1,47 @@
 const BaseAgent = require('../BaseAgent');
+const AIService = require('../../../services/ai/AIService');
 
 class GeneralFinanceAgent extends BaseAgent {
   constructor() {
     super('GeneralFinanceAgent', SYSTEM_PROMPT);
+    this.aiService = new AIService();
   }
 
   /**
    * Process the message - no special processing needed for general finance
    */
   async processMessage(message, sessionId) {
+    console.log(`📋 GeneralFinanceAgent: Processing general finance query for session: ${sessionId}`);
     return message;
+  }
+
+  /**
+   * Generate AI response for general finance queries
+   */
+  async generateResponse(message, sessionId) {
+    console.log(`💼 GeneralFinanceAgent: Starting response generation for session: ${sessionId}`);
+    
+    try {
+      // Process the message (currently no special processing for general finance)
+      const processedMessage = await this.processMessage(message, sessionId);
+      
+      // Create messages array with system prompt and processed message
+      const messages = [
+        { role: 'system', content: this.systemPrompt },
+        { role: 'user', content: processedMessage }
+      ];
+
+      console.log(`🤖 GeneralFinanceAgent: Calling AI service for response generation`);
+      
+      // Generate streaming response using the AI service
+      const result = await this.aiService.generateStreamingResponse(messages);
+      
+      console.log(`✅ GeneralFinanceAgent: Successfully generated streaming response`);
+      return result;
+    } catch (error) {
+      console.error(`❌ GeneralFinanceAgent: Error generating response:`, error.message);
+      throw error;
+    }
   }
 }
 

@@ -1,10 +1,12 @@
 const BaseAgent = require('../BaseAgent');
 const OptionChainService = require('../../../services/optionChain/OptionChainService');
+const AIService = require('../../../services/ai/AIService');
 
 class OptionsAgent extends BaseAgent {
   constructor() {
     super('OptionsAgent', SYSTEM_PROMPT);
     this.optionChainService = new OptionChainService();
+    this.aiService = new AIService();
     
     // Keywords that trigger option chain requests
     this.optionKeywords = [
@@ -41,25 +43,60 @@ class OptionsAgent extends BaseAgent {
     const optionRequest = this.isOptionChainRequest(message);
     
     if (!optionRequest.isOptionChainRequest) {
+      console.log(`📋 OptionsAgent: No option data needed for this message`);
       return message;
     }
 
+    console.log(`📊 OptionsAgent: Fetching option data for ${optionRequest.symbol}`);
+    
     try {
-      console.log(`Fetching option chain data for ${optionRequest.symbol}...`);
       const optionData = await this.optionChainService.getOptionChain(optionRequest.symbol);
-      const formattedData = this.optionChainService.formatOptionChainData(optionData);
+      
+      // For testing purposes, only use the first option to avoid token overload
+      const formattedData = this.optionChainService.formatFirstOptionOnly(optionData);
+      
+      console.log(`✅ OptionsAgent: Successfully formatted option data for ${optionRequest.symbol}`);
       
       // Enhance the message with option data context
-      const enhancedMessage = `${message}\n\nHere's the latest option chain data:\n${formattedData}\n\nPlease analyze and explain this data in a helpful way.`;
+      const enhancedMessage = `${message}\n\nHere's a sample from the latest option chain data:\n${formattedData}\n\nPlease analyze and explain this data in a helpful way. Note that this is just one option from the full chain for demonstration purposes.`;
       
       return enhancedMessage;
     } catch (error) {
-      console.error('Error fetching option data:', error);
+      console.error(`❌ OptionsAgent: Failed to fetch option data for ${optionRequest.symbol}:`, error.message);
       
       // Return message with error context
       const errorMessage = `${message}\n\nI'm sorry, I'm currently unable to fetch live option chain data due to a technical issue. However, I can still help you understand options trading concepts, strategies, and answer any questions you have about options!`;
       
       return errorMessage;
+    }
+  }
+
+  /**
+   * Generate AI response with options-specific context and tools
+   */
+  async generateResponse(message, sessionId) {
+    console.log(`🎯 OptionsAgent: Starting response generation for session: ${sessionId}`);
+    
+    try {
+      // First process the message to add any option chain data
+      const processedMessage = await this.processMessage(message, sessionId);
+      
+      // Create messages array with system prompt and processed message
+      const messages = [
+        { role: 'system', content: this.systemPrompt },
+        { role: 'user', content: processedMessage }
+      ];
+
+      console.log(`🤖 OptionsAgent: Calling AI service for response generation`);
+      
+      // Generate streaming response using the AI service
+      const result = await this.aiService.generateStreamingResponse(messages);
+      
+      console.log(`✅ OptionsAgent: Successfully generated streaming response`);
+      return result;
+    } catch (error) {
+      console.error(`❌ OptionsAgent: Error generating response:`, error.message);
+      throw error;
     }
   }
 

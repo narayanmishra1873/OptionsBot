@@ -11,12 +11,16 @@ class ChatController {
    * Handle chat messages
    */
   async handleChat(req, res) {
-    try {
-      const { message, sessionId = 'default' } = req.body;
+    const { message, sessionId = 'default' } = req.body;
+    console.log(`💬 ChatController: New chat request for session: ${sessionId}`);
 
+    try {
       if (!message) {
+        console.log(`⚠️ ChatController: Missing message in request`);
         return res.status(400).json({ error: 'Message is required' });
       }
+
+      console.log(`📝 ChatController: Processing message: "${message.substring(0, 50)}..."`);
 
       // Add user message to conversation history
       this.conversationManager.addMessage(sessionId, 'user', message);
@@ -26,10 +30,13 @@ class ChatController {
       res.setHeader('Cache-Control', 'no-cache');
       res.setHeader('Connection', 'keep-alive');
 
+      console.log(`🔄 ChatController: Starting agent processing`);
+
       // Process message with appropriate agent and get streaming response
       const agentResult = await this.agentManager.processMessage(message, sessionId);
       
       let fullResponse = '';
+      console.log(`📡 ChatController: Starting response streaming with ${agentResult.agent}`);
       
       // Stream the response from the agent
       for await (const delta of agentResult.response.textStream) {
@@ -39,6 +46,8 @@ class ChatController {
 
       // Add assistant message to conversation history
       this.conversationManager.addMessage(sessionId, 'assistant', fullResponse);
+
+      console.log(`✅ ChatController: Successfully completed chat for session: ${sessionId}`);
 
       // Send final message and close stream
       res.write(`data: ${JSON.stringify({ 
@@ -50,7 +59,7 @@ class ChatController {
       res.end();
 
     } catch (error) {
-      console.error('Chat error:', error);
+      console.error(`❌ ChatController: Error in chat handling for session ${sessionId}:`, error.message);
       
       if (!res.headersSent) {
         res.status(500).json({ error: 'Internal server error' });
