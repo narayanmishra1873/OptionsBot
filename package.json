@@ -1,0 +1,23 @@
+{
+  "name": "minimalist-ai-chatbot",
+  "version": "1.0.0",
+  "description": "A minimalist AI chatbot with web interface using AI SDK",
+  "main": "index.js",
+  "scripts": {
+    "start": "node index.js",
+    "dev": "nodemon index.js"
+  },
+  "keywords": ["ai", "chatbot", "ai-sdk", "openai", "web"],
+  "author": "",
+  "license": "MIT",
+  "dependencies": {
+    "ai": "^3.1.0",
+    "@ai-sdk/openai": "^0.0.66",
+    "express": "^4.18.2",
+    "cors": "^2.8.5",
+    "dotenv": "^16.3.1"
+  },
+  "devDependencies": {
+    "nodemon": "^3.0.2"
+  }
+}
