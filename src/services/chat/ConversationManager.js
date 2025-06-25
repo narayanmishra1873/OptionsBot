@@ -10,11 +10,9 @@ class ConversationManager {
   /**
    * Get or create conversation history for a session
    */
-  getConversation(sessionId, systemPrompt) {
+  getConversation(sessionId) {
     if (!this.conversations.has(sessionId)) {
-      this.conversations.set(sessionId, [
-        { role: 'system', content: systemPrompt }
-      ]);
+      this.conversations.set(sessionId, []);
     }
     
     return this.conversations.get(sessionId);
@@ -23,14 +21,14 @@ class ConversationManager {
   /**
    * Add a message to the conversation
    */
-  addMessage(sessionId, role, content, systemPrompt) {
-    const messages = this.getConversation(sessionId, systemPrompt);
+  addMessage(sessionId, role, content) {
+    const messages = this.getConversation(sessionId);
     
     // Add the new message
-    messages.push({ role, content });
+    messages.push({ role, content, timestamp: new Date().toISOString() });
     
     // Trim conversation if it gets too long
-    this.trimConversation(sessionId, systemPrompt);
+    this.trimConversation(sessionId);
     
     return messages;
   }
@@ -38,13 +36,14 @@ class ConversationManager {
   /**
    * Update the last user message (used for agent enhancement)
    */
-  updateLastUserMessage(sessionId, newContent, systemPrompt) {
-    const messages = this.getConversation(sessionId, systemPrompt);
+  updateLastUserMessage(sessionId, newContent) {
+    const messages = this.getConversation(sessionId);
     
     // Find the last user message and update it
     for (let i = messages.length - 1; i >= 0; i--) {
       if (messages[i].role === 'user') {
         messages[i].content = newContent;
+        messages[i].timestamp = new Date().toISOString();
         break;
       }
     }
@@ -55,15 +54,13 @@ class ConversationManager {
   /**
    * Trim conversation to maintain reasonable length
    */
-  trimConversation(sessionId, systemPrompt) {
-    const messages = this.getConversation(sessionId, systemPrompt);
+  trimConversation(sessionId) {
+    const messages = this.getConversation(sessionId);
     
     if (messages.length > this.maxConversationLength) {
-      // Keep the system message and the most recent messages
-      const systemMessage = messages[0];
-      const recentMessages = messages.slice(-this.maxConversationLength + 1);
-      
-      this.conversations.set(sessionId, [systemMessage, ...recentMessages]);
+      // Keep the most recent messages
+      const recentMessages = messages.slice(-this.maxConversationLength);
+      this.conversations.set(sessionId, recentMessages);
     }
   }
 

@@ -15,40 +15,6 @@ class OptionsAgent extends BaseAgent {
   }
 
   /**
-   * Check if this agent can handle the message
-   */
-  canHandle(message) {
-    if (!this.isActive) return false;
-    
-    const lowerMessage = message.toLowerCase();
-    return this.optionKeywords.some(keyword => 
-      lowerMessage.includes(keyword.toLowerCase())
-    );
-  }
-
-  /**
-   * Get priority for handling this message
-   */
-  getPriority(message) {
-    if (!this.canHandle(message)) return 0;
-    
-    const lowerMessage = message.toLowerCase();
-    
-    // High priority for direct option chain requests
-    if (lowerMessage.includes('option chain') || lowerMessage.includes('option data')) {
-      return 10;
-    }
-    
-    // Medium priority for specific symbols
-    if (lowerMessage.includes('nifty') || lowerMessage.includes('banknifty')) {
-      return 8;
-    }
-    
-    // Lower priority for general options terms
-    return 5;
-  }
-
-  /**
    * Check if message is requesting option chain data
    */
   isOptionChainRequest(message) {

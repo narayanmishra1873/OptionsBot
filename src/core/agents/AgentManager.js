@@ -1,9 +1,12 @@
 const OptionsAgent = require('./specialized/OptionsAgent');
 const GeneralFinanceAgent = require('./specialized/GeneralFinanceAgent');
+const AIService = require('../../services/ai/AIService');
 
 class AgentManager {
   constructor() {
     this.agents = [];
+    this.aiService = new AIService();
+    this.systemPrompt = this.getAgentManagerSystemPrompt();
     this.initializeAgents();
   }
 
@@ -20,43 +23,74 @@ class AgentManager {
   }
 
   /**
-   * Find the best agent to handle a message
+   * Get the system prompt for the Agent Manager
    */
-  selectAgent(message) {
-    const availableAgents = this.agents.filter(agent => 
-      agent.isActive && agent.canHandle(message)
-    );
+  getAgentManagerSystemPrompt() {
+    return `You are an intelligent Agent Manager responsible for selecting the most appropriate specialized agent to handle user queries about finance and trading.
 
-    if (availableAgents.length === 0) {
-      // Default to GeneralFinanceAgent if no specific agent can handle it
-      return this.agents.find(agent => agent.name === 'GeneralFinanceAgent');
+Available Agents:
+1. OptionsAgent - Handles queries about options trading, option chains, derivatives, strike prices, expiry dates, volatility, Greeks, options strategies, NSE options data, NIFTY/BANKNIFTY options, put-call ratios, open interest analysis
+2. GeneralFinanceAgent - Handles general finance questions, stock market basics, investment advice, portfolio management, fundamental analysis, technical analysis, market trends, financial planning
+
+Your task is to analyze the user's message and respond with ONLY the name of the most appropriate agent:
+- Respond with "OptionsAgent" for options-related queries
+- Respond with "GeneralFinanceAgent" for general finance queries
+
+Consider keywords, context, and intent. Be precise in your selection.
+
+Respond with ONLY the agent name, nothing else.`;
+  }
+
+  /**
+   * Use AI to intelligently select the best agent
+   */
+  async selectAgent(message) {
+    try {
+      const messages = [
+        { role: 'system', content: this.systemPrompt },
+        { role: 'user', content: `Select the appropriate agent for this message: "${message}"` }
+      ];
+
+      const selectedAgentName = await this.aiService.generateResponse(messages);
+      const trimmedName = selectedAgentName.trim();
+      
+      // Find the agent by name
+      const selectedAgent = this.agents.find(agent => 
+        agent.name === trimmedName && agent.isActive
+      );
+
+      if (selectedAgent) {
+        console.log(`🤖 AI selected agent: ${selectedAgent.name} for message: "${message.substring(0, 50)}..."`);
+        return selectedAgent;
+      }
+
+      // Fallback to default agent if AI selection fails
+      console.log(`⚠️ AI selection failed or agent not found. Using GeneralFinanceAgent as fallback.`);
+      return this.agents.find(agent => agent.name === 'GeneralFinanceAgent') || this.agents[0];
+      
+    } catch (error) {
+      console.error('Error in AI agent selection:', error);
+      // Fallback to GeneralFinanceAgent
+      return this.agents.find(agent => agent.name === 'GeneralFinanceAgent') || this.agents[0];
     }
-
-    // Sort by priority (highest first)
-    availableAgents.sort((a, b) => b.getPriority(message) - a.getPriority(message));
-    
-    console.log(`🤖 Selected agent: ${availableAgents[0].name} for message: "${message.substring(0, 50)}..."`);
-    
-    return availableAgents[0];
   }
 
   /**
    * Process a message using the appropriate agent
    */
   async processMessage(message, sessionId = 'default') {
-    const selectedAgent = this.selectAgent(message);
+    const selectedAgent = await this.selectAgent(message);
     
     if (!selectedAgent) {
       throw new Error('No agent available to handle this message');
     }
 
-    // Process the message with the selected agent
-    const processedMessage = await selectedAgent.processMessage(message, sessionId);
+    // Let the agent generate its own response
+    const agentResponse = await selectedAgent.generateResponse(message, sessionId);
     
     return {
       agent: selectedAgent.name,
-      systemPrompt: selectedAgent.getSystemPrompt(),
-      processedMessage,
+      response: agentResponse,
       originalMessage: message
     };
   }

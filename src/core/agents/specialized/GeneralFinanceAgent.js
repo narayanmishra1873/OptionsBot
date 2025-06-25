@@ -3,60 +3,12 @@ const BaseAgent = require('../BaseAgent');
 class GeneralFinanceAgent extends BaseAgent {
   constructor() {
     super('GeneralFinanceAgent', SYSTEM_PROMPT);
-    
-    // Keywords that this agent handles
-    this.financeKeywords = [
-      'stock', 'market', 'investment', 'trading', 'finance', 'portfolio',
-      'equity', 'mutual fund', 'sip', 'dividend', 'earnings', 'analysis',
-      'technical analysis', 'fundamental analysis', 'sector', 'economy'
-    ];
   }
 
   /**
-   * Check if this agent can handle the message
-   */
-  canHandle(message) {
-    if (!this.isActive) return false;
-    
-    const lowerMessage = message.toLowerCase();
-    
-    // This agent handles general finance queries
-    const hasFinanceKeywords = this.financeKeywords.some(keyword => 
-      lowerMessage.includes(keyword.toLowerCase())
-    );
-    
-    // Also handle general greetings and questions
-    const isGeneralQuery = /^(hi|hello|help|what|how|explain|tell me)/i.test(lowerMessage.trim());
-    
-    return hasFinanceKeywords || isGeneralQuery;
-  }
-
-  /**
-   * Get priority for handling this message
-   */
-  getPriority(message) {
-    if (!this.canHandle(message)) return 0;
-    
-    const lowerMessage = message.toLowerCase();
-    
-    // Lower priority for general queries (let specialized agents handle first)
-    if (/^(hi|hello|help|what|how)/i.test(lowerMessage.trim())) {
-      return 1;
-    }
-    
-    // Medium priority for general finance terms
-    if (this.financeKeywords.some(keyword => lowerMessage.includes(keyword))) {
-      return 3;
-    }
-    
-    return 1;
-  }
-
-  /**
-   * Process the message (no special processing needed for general finance)
+   * Process the message - no special processing needed for general finance
    */
   async processMessage(message, sessionId) {
-    // General finance agent doesn't need to enhance the message
     return message;
   }
 }

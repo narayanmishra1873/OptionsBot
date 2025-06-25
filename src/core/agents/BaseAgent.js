@@ -1,8 +1,11 @@
+const AIService = require('../../services/ai/AIService');
+
 class BaseAgent {
   constructor(name, systemPrompt) {
     this.name = name;
     this.systemPrompt = systemPrompt;
     this.isActive = true;
+    this.aiService = new AIService();
   }
 
   /**
@@ -13,28 +16,35 @@ class BaseAgent {
   }
 
   /**
-   * Check if this agent can handle the given message
-   * Override this method in child classes
-   */
-  canHandle(message) {
-    return false;
-  }
-
-  /**
-   * Get the priority of this agent for handling a message
-   * Higher numbers indicate higher priority
-   * Override this method in child classes
-   */
-  getPriority(message) {
-    return 0;
-  }
-
-  /**
    * Process the message and return enhanced context
    * Override this method in child classes
    */
   async processMessage(message, sessionId) {
     return message;
+  }
+
+  /**
+   * Generate a streaming AI response using this agent's capabilities
+   */
+  async generateResponse(message, sessionId) {
+    try {
+      // First process the message to add any agent-specific context
+      const processedMessage = await this.processMessage(message, sessionId);
+      
+      // Create messages array with system prompt and user message
+      const messages = [
+        { role: 'system', content: this.systemPrompt },
+        { role: 'user', content: processedMessage }
+      ];
+
+      // Generate streaming response
+      const result = await this.aiService.generateStreamingResponse(messages);
+      
+      return result;
+    } catch (error) {
+      console.error(`Error generating response in ${this.name}:`, error);
+      throw error;
+    }
   }
 
   /**
