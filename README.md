@@ -1,6 +1,3 @@
-<<<<<<< HEAD
-# OptionsBot
-=======
 # Minimalist AI Chatbot
 
 A simple command-line AI chatbot built with the AI SDK and OpenAI.
@@ -57,4 +54,3 @@ You can easily extend this chatbot by:
 ## License
 
 MIT
->>>>>>> 9b4e241 (Basic Chatbot with Option Chain Data)
