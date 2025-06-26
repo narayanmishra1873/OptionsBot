@@ -1,6 +1,7 @@
 const BaseAgent = require('../BaseAgent');
 const AIService = require('../../../services/ai/AIService');
 const { calculateExpectedNifty } = require('../tools/niftyDownsideTool');
+const { analyzeBearPutSpreads } = require('../tools/analyzeBearPutSpreads');
 const { z } = require('zod');
 const { tool } = require('ai');
 
@@ -42,6 +43,39 @@ class OptionsAgent extends BaseAgent {
             const toolResult = await calculateExpectedNifty(params);
             console.log(`[OptionsAgent] Tool result:`, toolResult);
             return toolResult;
+          }
+        }),
+        analyzeBearPutSpreads: tool({
+          description: 'Analyze an array of bear put spread pairs (each with longPut and shortPut details) and calculate all relevant metrics (net debit, max profit, max loss, breakeven, risk-reward, liquidity, etc.) for each. Returns the array with all metrics.',
+          parameters: z.object({
+            spreads: z.array(z.object({
+              longPut: z.object({
+                strike: z.number(),
+                premium: z.number(),
+                delta: z.number(),
+                gamma: z.number().optional(),
+                theta: z.number().optional(),
+                volume: z.number(),
+                oi: z.number(),
+                iv: z.number().optional(),
+                lotSize: z.number().optional()
+              }),
+              shortPut: z.object({
+                strike: z.number(),
+                premium: z.number(),
+                delta: z.number(),
+                gamma: z.number().optional(),
+                theta: z.number().optional(),
+                volume: z.number(),
+                oi: z.number(),
+                iv: z.number().optional(),
+                lotSize: z.number().optional()
+              })
+            })),
+            capital: z.number().optional().describe('Total capital for risk calculations (default 100000)')
+          }),
+          execute: async ({ spreads, capital }) => {
+            return analyzeBearPutSpreads(spreads, capital);
           }
         })
       };
@@ -109,20 +143,16 @@ const SYSTEM_PROMPT = `You are an advanced Multi-Bear Put Spread Strategy AI spe
 You are an expert in analyzing options data to construct three separate bear put spreads from available strike prices. Each spread consists of buying a higher strike put and selling a lower strike put. The three spreads may share individual strikes but cannot be identical pairs.
 
 🛠️ ADVANCED TOOL CAPABILITIES:
-You have access to a powerful calculateExpectedNifty tool that provides:
-- Live NSE option chain data fetching
-- Automatic calculation of expected Nifty values based on percentage drops or target levels
-- Intelligent strike price selection around expected levels
-- Comprehensive put option chain analysis for relevant strikes
-- Real-time pricing, open interest, volume, and full option greeks (delta, gamma, theta, vega, rho) for each strike
+You have access to two powerful tools:
+- calculateExpectedNifty: For fetching live NSE option chain data and calculating expected Nifty values based on user scenarios.
+- analyzeBearPutSpreads: For calculating all bear put spread metrics (net debit, max profit, max loss, breakeven, risk-reward, liquidity, etc.) for an array of spread candidates. You MUST use this tool for all spread calculations and only focus on selection and analysis.
 
 ⚒️ TOOL USAGE GUIDELINES:
-- ALWAYS use your tool when users ask about options, strikes, downside scenarios, or specific percentage/value targets
-- Automatically extract key parameters from user messages:
-  * Symbol: NIFTY (default), BANKNIFTY, FINNIFTY
-  * Expected Percentage Drop: Extract from phrases like "2% drop", "5% downside"
-  * Target Nifty Value: Extract from phrases like "Nifty 24000", "target 25000"
-- The tool handles all complex calculations - you focus on analysis and insights
+- ALWAYS use calculateExpectedNifty to fetch option chain and strike/put data.
+- ALWAYS use analyzeBearPutSpreads to calculate all spread metrics for 5 candidate bear put spreads (each with longPut and shortPut details).
+- After receiving the results from analyzeBearPutSpreads, select the top 3 spreads based on risk-reward, liquidity, and risk management criteria.
+- Do NOT attempt to calculate spread metrics yourself; always rely on the tool output.
+- Focus your analysis on selection, rationale, and portfolio construction.
 
 📊 MANDATORY OUTPUT FORMAT:
 When you receive tool results, you must present them in this exact structured format:
