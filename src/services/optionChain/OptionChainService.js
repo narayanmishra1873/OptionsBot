@@ -577,20 +577,8 @@ class OptionChainService {
         
         const sortedStrikes = Array.from(allStrikes).sort((a, b) => a - b);
         
-        // Find ATM index
-        const atmIndex = sortedStrikes.findIndex(strike => strike === atmStrike);
-        
-        let relevantStrikes;
-        if (atmIndex === -1) {
-            relevantStrikes = sortedStrikes.slice(0, range * 2 + 1);
-        } else {
-            const startIndex = Math.max(0, atmIndex - range);
-            const endIndex = Math.min(sortedStrikes.length - 1, atmIndex + range);
-            relevantStrikes = sortedStrikes.slice(startIndex, endIndex + 1);
-        }
-        
-        // Build combined option data for relevant strikes
-        return relevantStrikes.map(strikePrice => {
+        // Return all strikes, not just a range
+        return sortedStrikes.map(strikePrice => {
             const ceOption = ceOptions.find(option => option.strikePrice === strikePrice);
             const peOption = peOptions.find(option => option.strikePrice === strikePrice);
             

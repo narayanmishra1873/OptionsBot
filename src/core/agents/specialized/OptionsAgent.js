@@ -93,11 +93,18 @@ class OptionsAgent extends BaseAgent {
     try {
       const optionRequest = this.isOptionChainRequest(message);
       let optionData = null;
-      let formattedData = '';
+      let strikePrices = [];
       if (optionRequest.isOptionChainRequest) {
         optionData = await this.optionChainService.getOptionChain(optionRequest.symbol);
-        formattedData = this.optionChainService.formatFirstOptionOnly(optionData);
+        if (optionData && Array.isArray(optionData.optionData)) {
+          strikePrices = Array.from(new Set(optionData.optionData
+            .map(opt => typeof opt.strikePrice === 'number' ? opt.strikePrice : undefined)
+            .filter(x => typeof x === 'number')));
+        } else {
+          strikePrices = [];
+        }
       }
+      console.log('[OptionsAgent] striekePrices:', strikePrices);
       // Prepare tool schema
       const tools = [this.getDownsideToolSchema(optionData)];
       // Detect if tool should be called and extract params
@@ -119,8 +126,12 @@ class OptionsAgent extends BaseAgent {
       // Prepare messages
       const systemPrompt = this.systemPrompt;
       let userContent = message;
+      let formattedData = '';
+      if (strikePrices.length) {
+        formattedData = `Available strike prices: ${strikePrices.join(', ')}`;
+      }
       if (formattedData) {
-        userContent += `\n\nHere's a sample from the latest option chain data:\n${formattedData}\nIf you need to estimate downside, use the tool.`;
+        userContent += `\n\nHere's a list of available strike prices:\n${formattedData}\nIf you need to estimate downside, use the tool.`;
       }
       const messages = [
         { role: 'system', content: systemPrompt },
