@@ -27,6 +27,27 @@ class AIService {
   }
 
   /**
+   * Generate streaming AI response with tool calling support
+   */
+  async generateStreamingResponseWithTools(messages, tools, toolChoice = 'auto') {
+    try {
+      const result = await streamText({
+        model: this.model,
+        messages,
+        tools,
+        toolChoice,
+        maxTokens: config.ai.maxTokens,
+        temperature: config.ai.temperature,
+      });
+
+      return result;
+    } catch (error) {
+      console.error('AI Service error with tools:', error);
+      throw new Error('Failed to generate AI response with tools');
+    }
+  }
+
+  /**
    * Generate non-streaming AI response
    */
   async generateResponse(messages) {

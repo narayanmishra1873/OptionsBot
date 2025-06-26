@@ -1,88 +1,12 @@
 const BaseAgent = require('../BaseAgent');
-const OptionChainService = require('../../../services/optionChain/OptionChainService');
 const AIService = require('../../../services/ai/AIService');
-const { calculateOptionMetrics } = require('../../../utils/optionMath');
 const { calculateExpectedNifty } = require('../tools/niftyDownsideTool');
-const { generateWithTools } = require('../tools/generateWithTools');
+const { z } = require('zod');
 
 class OptionsAgent extends BaseAgent {
   constructor() {
     super('OptionsAgent', SYSTEM_PROMPT);
-    this.optionChainService = new OptionChainService();
     this.aiService = new AIService();
-    
-    // Keywords that trigger option chain requests
-    this.optionKeywords = [
-      'option chain', 'options', 'calls', 'puts', 'strike price', 
-      'expiry', 'nifty', 'banknifty', 'oi', 'open interest', 
-      'option data', 'derivatives', 'premium', 'volatility'
-    ];
-  }
-
-  /**
-   * Check if message is requesting option chain data
-   */
-  isOptionChainRequest(message) {
-    const lowerMessage = message.toLowerCase();
-    
-    // Look for symbols (NIFTY, BANKNIFTY, etc.)
-    const symbolMatch = lowerMessage.match(/\b(nifty|banknifty|finnifty)\b/i);
-    
-    // Check for option-related keywords
-    const hasOptionKeywords = this.optionKeywords.some(keyword => 
-      lowerMessage.includes(keyword.toLowerCase())
-    );
-    
-    return {
-      isOptionChainRequest: hasOptionKeywords,
-      symbol: symbolMatch ? symbolMatch[1].toUpperCase() : 'NIFTY'
-    };
-  }
-
-  /**
-   * Extract expected percentage downfall or expected Nifty value from user message
-   * Returns: { expectedPercentage, expectedNiftyValue }
-   */
-  extractDownsideExpectation(message) {
-    // Look for patterns like 'downfall of 2%', 'down 2%', 'fall by 2%', etc.
-    const percentMatch = message.match(/(?:downfall|down|fall|drop)[^\d]{0,10}(\d{1,3}(?:\.\d{1,2})?)\s*%/i);
-    if (percentMatch) {
-      return { expectedPercentage: parseFloat(percentMatch[1]) };
-    }
-    // Look for direct Nifty value: 'expect nifty at 21000', 'nifty to 21000', etc.
-    const niftyValueMatch = message.match(/nifty[^\d]{0,10}(\d{4,6})/i);
-    if (niftyValueMatch) {
-      return { expectedNiftyValue: parseFloat(niftyValueMatch[1]) };
-    }
-    return {};
-  }
-
-  /**
-   * Tool schema for AI tool-calling (downside calculator)
-   */
-  getDownsideToolSchema(optionData) {
-    return {
-      name: 'calculateExpectedNifty',
-      description: 'Calculate expected Nifty50 value based on user-estimated percentage downfall or direct value, and return the current Nifty50 value. Use this tool if the user mentions a percentage drop or a target Nifty value.',
-      parameters: {
-        type: 'object',
-        properties: {
-          optionChain: {
-            type: 'object',
-            description: 'The option chain data for Nifty50 (JSON object, must include current value as underlyingValue or records.underlyingValue)'
-          },
-          expectedPercentage: {
-            type: 'number',
-            description: 'The expected percentage downfall in Nifty50 (e.g., 2 for 2%)',
-          },
-          expectedNiftyValue: {
-            type: 'number',
-            description: 'The expected Nifty50 value (if provided directly by the user)',
-          }
-        },
-        required: ['optionChain']
-      }
-    };
   }
 
   /**
@@ -91,101 +15,77 @@ class OptionsAgent extends BaseAgent {
    */
   async generateResponse(message, sessionId) {
     try {
-      const optionRequest = this.isOptionChainRequest(message);
-      let optionData = null;
-      let strikePrices = [];
-      if (optionRequest.isOptionChainRequest) {
-        optionData = await this.optionChainService.getOptionChain(optionRequest.symbol);
-        if (optionData && Array.isArray(optionData.optionData)) {
-          strikePrices = Array.from(new Set(optionData.optionData
-            .map(opt => typeof opt.strikePrice === 'number' ? opt.strikePrice : undefined)
-            .filter(x => typeof x === 'number')));
-        } else {
-          strikePrices = [];
-        }
-      }
-      console.log('[OptionsAgent] striekePrices:', strikePrices);
-      // Prepare tool schema
-      const tools = [this.getDownsideToolSchema(optionData)];
-      // Detect if tool should be called and extract params
-      let toolCalls = [];
-      const percentMatch = message.match(/(\d{1,3}(?:\.\d{1,2})?)\s*%/);
-      const valueMatch = message.match(/nifty[^\d]{0,10}(\d{4,6})/i);
-      let expectedPercentage = percentMatch ? parseFloat(percentMatch[1]) : undefined;
-      let expectedNiftyValue = valueMatch ? parseFloat(valueMatch[1]) : undefined;
-      if ((expectedPercentage || expectedNiftyValue) && optionData) {
-        toolCalls.push({
-          toolName: 'calculateExpectedNifty',
-          args: {
-            optionChain: optionData,
-            expectedPercentage,
-            expectedNiftyValue
+      // Prepare tools in AI SDK format with Zod schemas
+      const tools = {
+        calculateExpectedNifty: {
+          description: 'Calculate expected Nifty50 value based on user-estimated percentage downfall or direct value, fetch the option chain, and return the current Nifty50 value, relevant strike prices, and put option chain for those strikes.',
+          parameters: z.object({
+            symbol: z.string().optional().describe('The symbol for the option chain (e.g., NIFTY, BANKNIFTY, FINNIFTY). Default is NIFTY if not specified.'),
+            expectedPercentage: z.number().optional().describe('The expected percentage downfall in Nifty50 (e.g., 2 for 2%). Extract this from user message if mentioned.'),
+            expectedNiftyValue: z.number().optional().describe('The expected Nifty50 value if provided directly by the user. Extract this from user message if mentioned.')
+          }),
+          execute: async (args) => {
+            // Set defaults
+            const params = {
+              symbol: args.symbol || 'NIFTY',
+              expectedPercentage: args.expectedPercentage,
+              expectedNiftyValue: args.expectedNiftyValue
+            };
+            return await calculateExpectedNifty(params);
           }
-        });
-      }
-      // Prepare messages
-      const systemPrompt = this.systemPrompt;
-      let userContent = message;
-      let formattedData = '';
-      if (strikePrices.length) {
-        formattedData = `Available strike prices: ${strikePrices.join(', ')}`;
-      }
-      if (formattedData) {
-        userContent += `\n\nHere's a list of available strike prices:\n${formattedData}\nIf you need to estimate downside, use the tool.`;
-      }
-      const messages = [
-        { role: 'system', content: systemPrompt },
-        { role: 'user', content: userContent }
-      ];
-      // Call global generateWithTools (generic)
-      const { aiResponse, toolResults } = await generateWithTools({
-        messages,
-        tools,
-        toolImpls: { calculateExpectedNifty },
-        toolCalls,
-        aiService: this.aiService,
-        temperature: 0.7,
-        maxTokens: 800
-      });
-      
-      // Format tool result for user if present
-      let toolResultText = '';
-      if (toolResults.calculateExpectedNifty) {
-        const result = toolResults.calculateExpectedNifty;
-        if (result.error) {
-          toolResultText = `\n\n⚠️ Could not calculate expected Nifty50: ${result.error}`;
-        } else {
-          toolResultText = `\n\n📉 Downside Tool Result:\n- Current Nifty50: ${result.currentNifty}\n- Expected Nifty50: ${result.expectedNifty}`;
         }
-      }
+      };
+
+      const messages = [
+        { role: 'system', content: this.systemPrompt },
+        { role: 'user', content: message }
+      ];
+
+      // Use AIService's native tool calling - let AI extract parameters and call tools
+      const result = await this.aiService.generateStreamingResponseWithTools(messages, tools, 'auto');
+      // Handle the streaming response with tool calls
+      let toolResultText = '';
       
-      // aiResponse is the full streaming response object from AI service (has textStream property)
-      
-      // If no tool result, just return the AI response object directly (it has textStream)
-      if (!toolResultText) {
-        return aiResponse;
-      }
-      
-      // If there is a tool result, stream both AI and tool result
-      async function* streamWithToolResult() {
+      // Stream the AI response and handle tool calls
+      async function* streamWithToolHandling() {
         try {
-          // aiResponse.textStream is the actual text stream
-          for await (const chunk of aiResponse.textStream) {
-            yield chunk;
+          for await (const part of result.fullStream) {
+            if (part.type === 'text-delta') {
+              yield part.textDelta;
+            } else if (part.type === 'tool-call') {
+              // Tool calls are automatically executed by AI SDK, just handle the results
+              console.log(`[OptionsAgent] AI called tool: ${part.toolName} with args:`, part.args);
+            } else if (part.type === 'tool-result') {
+              // Handle tool results
+              const { toolName, result: toolResult } = part;
+              if (toolName === 'calculateExpectedNifty') {
+                if (toolResult.error) {
+                  toolResultText = `\n\n⚠️ Could not calculate expected Nifty50: ${toolResult.error}`;
+                } else {
+                  toolResultText = `\n\n📉 Downside Tool Result:\n- Current Nifty50: ${toolResult.currentNifty}\n- Expected Nifty50: ${toolResult.expectedNifty}`;
+                  if (toolResult.surroundingStrikes && toolResult.surroundingStrikes.length) {
+                    toolResultText += `\n- Relevant Strikes: ${toolResult.surroundingStrikes.join(', ')}`;
+                  }
+                  if (toolResult.putOptions && toolResult.putOptions.length) {
+                    toolResultText += `\n- Put Option Chain for Relevant Strikes:\n` + toolResult.putOptions.map(opt => `Strike: ${opt.strikePrice}, LTP: ${opt.lastPrice}, OI: ${opt.openInterest}`).join('\n');
+                  }
+                }
+              }
+            }
+          }
+          
+          // Append tool results at the end
+          if (toolResultText) {
+            yield toolResultText;
           }
         } catch (err) {
-          console.log('[OptionsAgent] Error streaming AI response:', err);
-          yield '[Error streaming AI response]';
-        }
-        if (toolResultText) {
-          yield toolResultText;
+          console.log('[OptionsAgent] Error in stream handling:', err);
+          yield '\n\n❌ Error processing response';
         }
       }
-      const finalStream = streamWithToolResult();
-      
-      // Return in the same format as AIService.generateStreamingResponse (with textStream property)
+
       return {
-        textStream: finalStream
+        textStream: streamWithToolHandling()
       };
     } catch (error) {
       // Always return an object with textStream property for consistency
@@ -196,13 +96,6 @@ class OptionsAgent extends BaseAgent {
         textStream: errorStream()
       };
     }
-  }
-
-  /**
-   * Get option chain data directly (for API endpoints)
-   */
-  async getOptionChain(symbol = 'NIFTY') {
-    return await this.optionChainService.getOptionChain(symbol.toUpperCase());
   }
 }
 
@@ -225,6 +118,15 @@ You are an expert Options Trading Assistant specializing in Indian equity deriva
 - Put-Call Ratio analysis
 - Support & Resistance from option data
 
+⚒️ TOOL USAGE:
+- You have access to a calculateExpectedNifty tool that fetches live option chain data and calculates relevant strikes.
+- You MUST analyze the user's message and extract relevant parameters (symbol, expectedPercentage, expectedNiftyValue) to call this tool.
+- When the user mentions a percentage drop (e.g., "2%", "5% drop"), extract the expectedPercentage parameter.
+- When the user mentions a target Nifty value (e.g., "Nifty 24000", "target 25000"), extract the expectedNiftyValue parameter.
+- For symbol, extract NIFTY, BANKNIFTY, or FINNIFTY from the message. Default to 'NIFTY' if not specified.
+- If the user asks about options, strikes, or downside scenarios, you should call the tool with appropriate parameters.
+- Always present tool results clearly, including current Nifty value, expected Nifty value, relevant strikes, and put option chain data.
+
 🎨 RESPONSE STYLE:
 - Clear, concise, and actionable insights
 - Use relevant emojis for better readability
@@ -233,17 +135,12 @@ You are an expert Options Trading Assistant specializing in Indian equity deriva
 - Focus on practical trading applications
 
 ⚠️ IMPORTANT GUIDELINES:
-- Always mention that this is for educational purposes
+- All advice is for educational purposes only
 - Emphasize proper risk management
 - Highlight that options trading involves significant risk
 - Suggest position sizing and stop-loss strategies
 - Recommend consulting with financial advisors for major decisions
 
-⚒️ TOOL USAGE:
-- If the user asks for a downside estimate (percentage drop or target Nifty value), use the available tool to calculate the expected Nifty50 value and always mention the current Nifty50 value.
-- Use the tool whenever you need to perform such calculations, and clearly present the tool's results in your response.
-
-Your responses should be informative, practical, and help traders make better-informed decisions while maintaining responsible trading practices.
-`;
+Your responses should be informative, practical, and help traders make better-informed decisions while maintaining responsible trading practices. For all option chain and strike logic, always use the provided tools to ensure live, accurate data. When calling a tool, you must extract and pass the correct parameters from the user message. Do not use any fallback mechanism or prompt the user for missing values.`;
 
 module.exports = OptionsAgent;
