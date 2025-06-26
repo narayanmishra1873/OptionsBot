@@ -28,19 +28,44 @@ class AgentManager {
    * Get the system prompt for the Agent Manager
    */
   getAgentManagerSystemPrompt() {
-    return `You are an intelligent Agent Manager responsible for selecting the most appropriate specialized agent to handle user queries about finance and trading.
+    return `You are an intelligent Agent Manager responsible for routing user queries to the most appropriate specialized financial agent. You must analyze each user message and select the correct agent based on the query content and intent.
 
-Available Agents:
-1. OptionsAgent - Handles all queries about Indian equity options trading, including option chains, strike selection, expiry, Greeks, strategies, and real-time data. Delegates all option chain calculations and strike selection to specialized tools that fetch and process live data as needed.
-2. GeneralFinanceAgent - Handles general finance questions, stock market basics, investment advice, portfolio management, fundamental/technical analysis, market trends, and financial planning.
+🎯 AVAILABLE AGENTS:
 
-Your task is to analyze the user's message and respond with ONLY the name of the most appropriate agent:
-- Respond with "OptionsAgent" for any options-related or derivatives queries
-- Respond with "GeneralFinanceAgent" for all other finance queries
+1. OptionsAgent - SELECT FOR:
+   - ANY mention of options, derivatives, option chains, strikes, expiry
+   - Queries about puts, calls, option strategies (straddles, strangles, spreads)
+   - Requests for downside protection, hedging with options
+   - Questions about option Greeks (delta, gamma, theta, vega)
+   - Option chain analysis, strike selection, open interest
+   - Volatility trading, IV analysis, max pain theory
+   - NSE derivatives (NIFTY, BANKNIFTY, FINNIFTY options)
+   - Specific percentage drops or target values for option analysis
+   - Keywords: "options", "puts", "calls", "strikes", "expiry", "hedging", "downside", "option chain", "Greeks", "derivatives"
 
-Consider keywords, context, and intent. Be precise in your selection.
+2. GeneralFinanceAgent - SELECT FOR:
+   - Stock market basics, investment advice, portfolio management
+   - Equity research, fundamental/technical analysis
+   - Mutual funds, SIPs, systematic investing
+   - Market trends, sector analysis, economic indicators
+   - Personal finance planning, wealth management
+   - General trading strategies (not options-specific)
+   - Financial planning, tax strategies, insurance
+   - Keywords: "stocks", "investment", "portfolio", "SIP", "mutual funds", "market", "finance", "planning"
 
-Respond with ONLY the agent name, nothing else.`;
+🔍 ROUTING LOGIC:
+- If the message contains ANY options/derivatives keywords or concepts → "OptionsAgent"
+- If asking about percentage drops WITH context of options/hedging → "OptionsAgent"  
+- If asking about target values WITH context of option strategies → "OptionsAgent"
+- For all other finance/investment queries → "GeneralFinanceAgent"
+- When in doubt between agents, prefer OptionsAgent if ANY options context exists
+
+📋 RESPONSE FORMAT:
+- Respond with ONLY the agent name: "OptionsAgent" or "GeneralFinanceAgent"
+- Do NOT include any explanation, punctuation, or additional text
+- Be precise and consistent in your selection
+
+Analyze the user message carefully and respond with the appropriate agent name only.`;
   }
 
   /**
@@ -99,9 +124,14 @@ Respond with ONLY the agent name, nothing else.`;
     
     try {
       // Let the agent generate its own response
+      console.log(`🔄 AgentManager: Calling ${selectedAgent.name}.generateResponse()`);
       const agentResponse = await selectedAgent.generateResponse(message, sessionId);
       
-      console.log(`✅ AgentManager: Successfully got response from ${selectedAgent.name}`);
+      console.log(`✅ AgentManager: Successfully got response from ${selectedAgent.name}`, {
+        hasResponse: !!agentResponse,
+        hasTextStream: !!agentResponse?.textStream,
+        responseType: typeof agentResponse
+      });
       
       return {
         agent: selectedAgent.name,
@@ -110,6 +140,7 @@ Respond with ONLY the agent name, nothing else.`;
       };
     } catch (error) {
       console.error(`❌ AgentManager: Error getting response from ${selectedAgent.name}:`, error.message);
+      console.error(`❌ AgentManager: Error stack:`, error.stack);
       throw error;
     }
   }

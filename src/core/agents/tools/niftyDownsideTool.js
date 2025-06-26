@@ -1,4 +1,5 @@
 const OptionChainService = require('../../../services/optionChain/OptionChainService');
+const optionMath = require('../../../utils/optionMath');
 
 /**
  * Tool to calculate expected Nifty50 value based on user input (percentage downfall or direct value),
@@ -11,18 +12,23 @@ const OptionChainService = require('../../../services/optionChain/OptionChainSer
  * @returns {Promise<Object>} { currentNifty, expectedNifty, surroundingStrikes, putOptions }
  */
 async function calculateExpectedNifty({ symbol, expectedPercentage, expectedNiftyValue }) {
+  console.log(`[niftyDownsideTool] Called with symbol=${symbol}, expectedPercentage=${expectedPercentage}, expectedNiftyValue=${expectedNiftyValue}`);
   const optionChainService = new OptionChainService();
   // Fetch option chain for latest expiry
   const optionChain = await optionChainService.getOptionChain(symbol || 'NIFTY');
+  console.log(`[niftyDownsideTool] Fetched option chain for ${symbol || 'NIFTY'}. Underlying value: ${optionChain.underlyingValue}`);
   let currentNifty = optionChain.underlyingValue;
 
   let expectedNifty = null;
   if (typeof expectedNiftyValue === 'number' && !isNaN(expectedNiftyValue)) {
     expectedNifty = expectedNiftyValue;
+    console.log(`[niftyDownsideTool] Using provided expectedNiftyValue: ${expectedNifty}`);
   } else if (typeof expectedPercentage === 'number' && !isNaN(expectedPercentage)) {
     expectedNifty = currentNifty * (1 - expectedPercentage / 100);
     expectedNifty = Math.round(expectedNifty * 100) / 100;
+    console.log(`[niftyDownsideTool] Calculated expectedNifty from percentage: ${expectedNifty}`);
   } else {
+    console.error('[niftyDownsideTool] Error: Either expectedPercentage or expectedNiftyValue must be provided');
     throw new Error('Either expectedPercentage or expectedNiftyValue must be provided');
   }
 
@@ -32,7 +38,9 @@ async function calculateExpectedNifty({ symbol, expectedPercentage, expectedNift
     strikePrices = Array.from(new Set(optionChain.optionData
       .map(opt => typeof opt.strikePrice === 'number' ? opt.strikePrice : undefined)
       .filter(x => typeof x === 'number')));
+    console.log(`[niftyDownsideTool] Extracted ${strikePrices.length} strike prices.`);
   } else {
+    console.error('[niftyDownsideTool] Unable to extract strike prices from option chain');
     throw new Error('Unable to extract strike prices from option chain');
   }
   strikePrices.sort((a, b) => a - b);
@@ -51,24 +59,42 @@ async function calculateExpectedNifty({ symbol, expectedPercentage, expectedNift
   const start = Math.max(0, closestIdx - 4);
   const end = Math.min(strikePrices.length, closestIdx + 5);
   const surroundingStrikes = strikePrices.slice(start, end);
+  console.log(`[niftyDownsideTool] Selected surrounding strikes: ${surroundingStrikes.join(', ')}`);
 
-  // Get put option data for these strikes
+  // Get put option data for these strikes, including greeks
   let putOptions = [];
   if (optionChain && Array.isArray(optionChain.optionData)) {
     putOptions = optionChain.optionData
       .filter(opt => surroundingStrikes.includes(opt.strikePrice))
-      .map(opt => ({
-        strikePrice: opt.strikePrice,
-        ...opt.put
-      }));
+      .map(opt => {
+        const put = opt.put || {};
+        // Calculate greeks for each put option
+        const greeks = optionMath.calculateGreeks({
+          type: 'put',
+          S: currentNifty,
+          K: opt.strikePrice,
+          T: put.daysToExpiry ? put.daysToExpiry / 365 : (optionChain.daysToExpiry ? optionChain.daysToExpiry / 365 : 0.02),
+          r: 0.06, // Assume 6% risk-free rate (can be parameterized)
+          v: put.impliedVolatility ? put.impliedVolatility / 100 : 0.18 // Use IV if available, else 18% default
+        });
+        console.log(`[niftyDownsideTool] Put option for strike ${opt.strikePrice}: LTP=${put.lastPrice}, OI=${put.openInterest}, IV=${put.impliedVolatility}, Greeks=`, greeks);
+        return {
+          strikePrice: opt.strikePrice,
+          ...put,
+          greeks
+        };
+      });
+    console.log(`[niftyDownsideTool] Compiled put options for selected strikes. Count: ${putOptions.length}`);
   }
 
-  return {
+  result = {
     currentNifty,
     expectedNifty,
     surroundingStrikes,
     putOptions
   };
+  console.log(`[niftyDownsideTool] Result:`, result);
+  return result;
 }
 
 module.exports = { calculateExpectedNifty };

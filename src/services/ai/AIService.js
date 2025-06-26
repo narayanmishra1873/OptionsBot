@@ -70,6 +70,31 @@ class AIService {
       throw new Error('Failed to generate AI response');
     }
   }
+
+  /**
+   * Enhanced streaming with tools - handles multi-step tool interactions
+   */
+  async generateStreamingResponseWithToolsEnhanced(messages, tools, toolChoice = 'auto', maxSteps = 5) {
+    try {
+      console.log(`[AIService] Enhanced streaming with tools, maxSteps: ${maxSteps}`);
+      
+      const result = await streamText({
+        model: this.model,
+        messages,
+        tools,
+        toolChoice,
+        maxTokens: config.ai.maxTokens,
+        temperature: config.ai.temperature,
+        maxSteps: maxSteps // Allow multi-step tool interactions
+      });
+
+      console.log(`[AIService] Enhanced streaming initialized successfully`);
+      return result;
+    } catch (error) {
+      console.error('AI Service enhanced streaming error:', error);
+      throw new Error('Failed to generate enhanced AI response with tools');
+    }
+  }
 }
 
 module.exports = AIService;

@@ -34,15 +34,24 @@ class ChatController {
 
       // Process message with appropriate agent and get streaming response
       const agentResult = await this.agentManager.processMessage(message, sessionId);
+      console.log(`🤖 ChatController: Agent result received:`, {
+        agent: agentResult.agent,
+        hasResponse: !!agentResult.response,
+        hasTextStream: !!agentResult.response?.textStream
+      });
       
       let fullResponse = '';
       console.log(`📡 ChatController: Starting response streaming with ${agentResult.agent}`);
       
       // Stream the response from the agent
+      let deltaCount = 0;
       for await (const delta of agentResult.response.textStream) {
+        deltaCount++;
+        //console.log(`📤 ChatController: Streaming delta ${deltaCount}: "${delta.substring(0, 100)}..."`);
         fullResponse += delta;
         res.write(`data: ${JSON.stringify({ delta, agent: agentResult.agent })}\n\n`);
       }
+      console.log(`📊 ChatController: Finished streaming, total deltas: ${deltaCount}, response length: ${fullResponse.length}`);
 
       // Add assistant message to conversation history
       this.conversationManager.addMessage(sessionId, 'assistant', fullResponse);
