@@ -18,18 +18,30 @@ class GeneralFinanceAgent extends BaseAgent {
   /**
    * Generate AI response for general finance queries
    */
-  async generateResponse(message, sessionId) {
+  async generateResponse(message, sessionId, conversationHistory = []) {
     console.log(`💼 GeneralFinanceAgent: Starting response generation for session: ${sessionId}`);
+    console.log(`💼 GeneralFinanceAgent: Conversation history length: ${conversationHistory.length}`);
     
     try {
       // Process the message (currently no special processing for general finance)
       const processedMessage = await this.processMessage(message, sessionId);
       
-      // Create messages array with system prompt and processed message
+      // Build messages array with conversation history and system prompt
       const messages = [
-        { role: 'system', content: this.systemPrompt },
-        { role: 'user', content: processedMessage }
+        { role: 'system', content: this.systemPrompt }
       ];
+      
+      // Add conversation history (excluding the current message as it will be added separately)
+      const historyMessages = conversationHistory
+        .filter(msg => msg.content !== message) // Exclude current message to avoid duplication
+        .map(msg => ({ role: msg.role, content: msg.content }));
+      
+      messages.push(...historyMessages);
+      
+      // Add the current user message
+      messages.push({ role: 'user', content: processedMessage });
+      
+      console.log(`💼 GeneralFinanceAgent: Built message array with ${messages.length} messages (1 system + ${historyMessages.length} history + 1 current)`);
 
       console.log(`🤖 GeneralFinanceAgent: Calling AI service for response generation`);
       

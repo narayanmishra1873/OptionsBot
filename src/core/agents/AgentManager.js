@@ -55,6 +55,7 @@ class AgentManager {
 
 🔍 ROUTING LOGIC:
 - If the message contains ANY options/derivatives keywords or concepts → "OptionsAgent"
+- If asking about current NIFTY/BANKNIFTY values or live market data → "OptionsAgent"
 - If asking about percentage drops WITH context of options/hedging → "OptionsAgent"  
 - If asking about target values WITH context of option strategies → "OptionsAgent"
 - For all other finance/investment queries → "GeneralFinanceAgent"
@@ -110,8 +111,9 @@ Analyze the user message carefully and respond with the appropriate agent name o
   /**
    * Process a message using the appropriate agent
    */
-  async processMessage(message, sessionId = 'default') {
+  async processMessage(message, sessionId = 'default', conversationHistory = []) {
     console.log(`📨 AgentManager: Processing message for session: ${sessionId}`);
+    console.log(`📚 AgentManager: Received ${conversationHistory.length} messages from conversation history for session: ${sessionId}`);
     
     const selectedAgent = await this.selectAgent(message);
     
@@ -123,9 +125,9 @@ Analyze the user message carefully and respond with the appropriate agent name o
     console.log(`🚀 AgentManager: Delegating to ${selectedAgent.name} for response generation`);
     
     try {
-      // Let the agent generate its own response
-      console.log(`🔄 AgentManager: Calling ${selectedAgent.name}.generateResponse()`);
-      const agentResponse = await selectedAgent.generateResponse(message, sessionId);
+      // Let the agent generate its own response with conversation history
+      console.log(`🔄 AgentManager: Calling ${selectedAgent.name}.generateResponse() with conversation history`);
+      const agentResponse = await selectedAgent.generateResponse(message, sessionId, conversationHistory);
       
       console.log(`✅ AgentManager: Successfully got response from ${selectedAgent.name}`, {
         hasResponse: !!agentResponse,

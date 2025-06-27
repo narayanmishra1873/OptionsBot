@@ -25,6 +25,12 @@ class ChatController {
       // Add user message to conversation history
       this.conversationManager.addMessage(sessionId, 'user', message);
 
+      // Get conversation history to pass to agents (excluding current message)
+      const conversationHistory = this.conversationManager.getConversation(sessionId)
+        .filter(msg => msg.content !== message); // Exclude current message to avoid duplication
+      
+      console.log(`📚 ChatController: Retrieved ${conversationHistory.length} messages from conversation history for session: ${sessionId}`);
+
       // Set headers for streaming
       res.setHeader('Content-Type', 'text/event-stream');
       res.setHeader('Cache-Control', 'no-cache');
@@ -33,7 +39,7 @@ class ChatController {
       console.log(`🔄 ChatController: Starting agent processing`);
 
       // Process message with appropriate agent and get streaming response
-      const agentResult = await this.agentManager.processMessage(message, sessionId);
+      const agentResult = await this.agentManager.processMessage(message, sessionId, conversationHistory);
       console.log(`🤖 ChatController: Agent result received:`, {
         agent: agentResult.agent,
         hasResponse: !!agentResult.response,

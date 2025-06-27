@@ -23,8 +23,11 @@ class BaseAgent {
   /**
    * Generate a streaming AI response using this agent's capabilities
    * Must be implemented by child classes
+   * @param {string} message - The current user message
+   * @param {string} sessionId - The session identifier
+   * @param {Array} conversationHistory - Array of previous messages in the conversation
    */
-  async generateResponse(message, sessionId) {
+  async generateResponse(message, sessionId, conversationHistory = []) {
     throw new Error(`generateResponse method must be implemented by ${this.name}`);
   }
 

@@ -15,9 +15,10 @@ class OptionsAgent extends BaseAgent {
    * Generate AI response with tool-calling for downside calculation (now generic)
    * Always returns an async iterable for streaming compatibility.
    */
-  async generateResponse(message, sessionId) {
+  async generateResponse(message, sessionId, conversationHistory = []) {
     console.log(`[OptionsAgent] Starting generateResponse for sessionId: ${sessionId}`);
     console.log(`[OptionsAgent] User message: ${message}`);
+    console.log(`[OptionsAgent] Conversation history length: ${conversationHistory.length}`);
     
     try {
       // Prepare tools using AI SDK tool() function
@@ -80,10 +81,22 @@ class OptionsAgent extends BaseAgent {
         })
       };
 
+      // Build messages array with conversation history and system prompt
       const messages = [
-        { role: 'system', content: this.systemPrompt },
-        { role: 'user', content: message }
+        { role: 'system', content: this.systemPrompt }
       ];
+      
+      // Add conversation history (excluding the current message as it will be added separately)
+      const historyMessages = conversationHistory
+        .filter(msg => msg.content !== message) // Exclude current message to avoid duplication
+        .map(msg => ({ role: msg.role, content: msg.content }));
+      
+      messages.push(...historyMessages);
+      
+      // Add the current user message
+      messages.push({ role: 'user', content: message });
+      
+      console.log(`[OptionsAgent] Built message array with ${messages.length} messages (1 system + ${historyMessages.length} history + 1 current)`);
 
       console.log(`[OptionsAgent] Calling AIService.generateStreamingResponseWithToolsEnhanced`);
       
