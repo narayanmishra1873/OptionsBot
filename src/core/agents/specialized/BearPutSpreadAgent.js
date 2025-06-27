@@ -312,6 +312,7 @@ When presenting your analysis to the user, always use the following output struc
 1. 📊 MARKET SNAPSHOT
    - Current Nifty50 value (explain what this means)
    - Expected Nifty50 value (if the user gave a target)
+   - Expiry being considered (show the expiry date for the options used)
    - How much the market would need to fall for this plan to work
    - A short, friendly summary of what the market is doing
 

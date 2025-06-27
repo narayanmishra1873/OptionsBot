@@ -9,7 +9,7 @@ const optionMath = require('../../../utils/optionMath');
  * @param {string} params.symbol - The symbol for the option chain (e.g., NIFTY, BANKNIFTY)
  * @param {number} [params.expectedPercentage] - The expected percentage downfall (e.g., 2 for 2%)
  * @param {number} [params.expectedNiftyValue] - The expected Nifty50 value (if provided directly)
- * @returns {Promise<Object>} { currentNifty, expectedNifty, surroundingStrikes, putOptions }
+ * @returns {Promise<Object>} { currentNifty, expectedNifty, surroundingStrikes, putOptions, expiry, daysToExpiry } // expiry: Expiry date being considered, daysToExpiry: Days left for expiry
  */
 async function calculateExpectedNifty({ symbol, expectedPercentage, expectedNiftyValue }) {
   console.log(`[niftyDownsideTool] Called with symbol=${symbol}, expectedPercentage=${expectedPercentage}, expectedNiftyValue=${expectedNiftyValue}`);
@@ -73,7 +73,12 @@ async function calculateExpectedNifty({ symbol, expectedPercentage, expectedNift
           type: 'put',
           S: currentNifty,
           K: opt.strikePrice,
-          T: put.daysToExpiry ? put.daysToExpiry / 365 : (optionChain.daysToExpiry ? optionChain.daysToExpiry / 365 : 0.02),
+          T: put.daysToExpiry ? put.daysToExpiry / 365 : (optionChain.currentExpiry ? (() => {
+            const expiryDate = new Date(optionChain.currentExpiry);
+            const currentDate = new Date();
+            const days = Math.ceil((expiryDate - currentDate) / (1000 * 60 * 60 * 24));
+            return days > 0 ? days / 365 : 0.02;
+          })() : 0.02),
           r: 0.06, // Assume 6% risk-free rate (can be parameterized)
           v: put.impliedVolatility ? put.impliedVolatility / 100 : 0.18 // Use IV if available, else 18% default
         });
@@ -87,11 +92,23 @@ async function calculateExpectedNifty({ symbol, expectedPercentage, expectedNift
     console.log(`[niftyDownsideTool] Compiled put options for selected strikes. Count: ${putOptions.length}`);
   }
 
-  result = {
+  // Calculate days to expiry from currentExpiry
+  let daysToExpiry = 0;
+  let expiry = optionChain.currentExpiry || null;
+  if (expiry) {
+    const expiryDate = new Date(expiry);
+    const currentDate = new Date();
+    daysToExpiry = Math.ceil((expiryDate - currentDate) / (1000 * 60 * 60 * 24));
+  }
+  console.log(`[niftyDownsideTool] Expiry: ${expiry}, Days to expiry: ${daysToExpiry}`);
+
+  const result = {
     currentNifty,
     expectedNifty,
     surroundingStrikes,
-    putOptions
+    putOptions,
+    expiry,
+    daysToExpiry
   };
   console.log(`[niftyDownsideTool] Result:`, result);
   return result;
