@@ -1,6 +1,5 @@
-const OptionsAgent = require('./specialized/OptionsAgent');
+const BearPutSpreadAgent = require('./specialized/BearPutSpreadAgent');
 const GeneralFinanceAgent = require('./specialized/GeneralFinanceAgent');
-//const BearPutSpreadAgent = require('./specialized/BearPutSpreadAgent');
 const AIService = require('../../services/ai/AIService');
 
 class AgentManager {
@@ -16,8 +15,7 @@ class AgentManager {
    */
   initializeAgents() {
     // Add specialized agents
-    this.agents.push(new OptionsAgent());
-    //this.agents.push(new BearPutSpreadAgent());
+    this.agents.push(new BearPutSpreadAgent());
     this.agents.push(new GeneralFinanceAgent());
     
     console.log(`✅ Initialized ${this.agents.length} agents:`, 
@@ -32,7 +30,7 @@ class AgentManager {
 
 🎯 AVAILABLE AGENTS:
 
-1. OptionsAgent - SELECT FOR:
+1. BearPutSpreadAgent - SELECT FOR:
    - ANY mention of options, derivatives, option chains, strikes, expiry
    - Queries about puts, calls, option strategies (straddles, strangles, spreads)
    - Requests for downside protection, hedging with options
@@ -54,15 +52,15 @@ class AgentManager {
    - Keywords: "stocks", "investment", "portfolio", "SIP", "mutual funds", "market", "finance", "planning"
 
 🔍 ROUTING LOGIC:
-- If the message contains ANY options/derivatives keywords or concepts → "OptionsAgent"
-- If asking about current NIFTY/BANKNIFTY values or live market data → "OptionsAgent"
-- If asking about percentage drops WITH context of options/hedging → "OptionsAgent"  
-- If asking about target values WITH context of option strategies → "OptionsAgent"
+- If the message contains ANY options/derivatives keywords or concepts → "BearPutSpreadAgent"
+- If asking about current NIFTY/BANKNIFTY values or live market data → "BearPutSpreadAgent"
+- If asking about percentage drops WITH context of options/hedging → "BearPutSpreadAgent"  
+- If asking about target values WITH context of option strategies → "BearPutSpreadAgent"
 - For all other finance/investment queries → "GeneralFinanceAgent"
-- When in doubt between agents, prefer OptionsAgent if ANY options context exists
+- When in doubt between agents, prefer BearPutSpreadAgent if ANY options context exists
 
 📋 RESPONSE FORMAT:
-- Respond with ONLY the agent name: "OptionsAgent" or "GeneralFinanceAgent"
+- Respond with ONLY the agent name: "BearPutSpreadAgent" or "GeneralFinanceAgent"
 - Do NOT include any explanation, punctuation, or additional text
 - Be precise and consistent in your selection
 

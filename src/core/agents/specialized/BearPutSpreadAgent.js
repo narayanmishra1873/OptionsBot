@@ -5,9 +5,9 @@ const { analyzeBearPutSpreads } = require('../tools/analyzeBearPutSpreads');
 const { z } = require('zod');
 const { tool } = require('ai');
 
-class OptionsAgent extends BaseAgent {
+class BearPutSpreadAgent extends BaseAgent {
   constructor() {
-    super('OptionsAgent', SYSTEM_PROMPT);
+    super('BearPutSpreadAgent', SYSTEM_PROMPT);
     this.aiService = new AIService();
   }
 
@@ -16,9 +16,9 @@ class OptionsAgent extends BaseAgent {
    * Always returns an async iterable for streaming compatibility.
    */
   async generateResponse(message, sessionId, conversationHistory = []) {
-    console.log(`[OptionsAgent] Starting generateResponse for sessionId: ${sessionId}`);
-    console.log(`[OptionsAgent] User message: ${message}`);
-    console.log(`[OptionsAgent] Conversation history length: ${conversationHistory.length}`);
+    console.log(`[BearPutSpreadAgent] Starting generateResponse for sessionId: ${sessionId}`);
+    console.log(`[BearPutSpreadAgent] User message: ${message}`);
+    console.log(`[BearPutSpreadAgent] Conversation history length: ${conversationHistory.length}`);
     
     try {
       // Prepare tools using AI SDK tool() function
@@ -31,7 +31,7 @@ class OptionsAgent extends BaseAgent {
             expectedNiftyValue: z.number().optional().describe('The expected Nifty50 value if provided directly by the user. Extract this from user message if mentioned.')
           }),
           execute: async ({ symbol, expectedPercentage, expectedNiftyValue }) => {
-            console.log(`[OptionsAgent] Tool execute called with args:`, { symbol, expectedPercentage, expectedNiftyValue });
+            console.log(`[BearPutSpreadAgent] Tool execute called with args:`, { symbol, expectedPercentage, expectedNiftyValue });
             
             // Set defaults
             const params = {
@@ -40,9 +40,9 @@ class OptionsAgent extends BaseAgent {
               expectedNiftyValue
             };
             
-            console.log(`[OptionsAgent] Calling calculateExpectedNifty with params:`, params);
+            console.log(`[BearPutSpreadAgent] Calling calculateExpectedNifty with params:`, params);
             const toolResult = await calculateExpectedNifty(params);
-            console.log(`[OptionsAgent] Tool result:`, toolResult);
+            console.log(`[BearPutSpreadAgent] Tool result:`, toolResult);
             return toolResult;
           }
         }),
@@ -96,37 +96,37 @@ class OptionsAgent extends BaseAgent {
       // Add the current user message
       messages.push({ role: 'user', content: message });
       
-      console.log(`[OptionsAgent] Built message array with ${messages.length} messages (1 system + ${historyMessages.length} history + 1 current)`);
+      console.log(`[BearPutSpreadAgent] Built message array with ${messages.length} messages (1 system + ${historyMessages.length} history + 1 current)`);
 
-      console.log(`[OptionsAgent] Calling AIService.generateStreamingResponseWithToolsEnhanced`);
+      console.log(`[BearPutSpreadAgent] Calling AIService.generateStreamingResponseWithToolsEnhanced`);
       
       // Use enhanced streaming with proper tool handling and multi-step support
       const result = await this.aiService.generateStreamingResponseWithToolsEnhanced(messages, tools, 'auto', 5);
-      console.log(`[OptionsAgent] AIService returned result:`, !!result);
+      console.log(`[BearPutSpreadAgent] AIService returned result:`, !!result);
       
       // Process the streaming response properly
       async function* processStreamingResponse() {
-        console.log(`[OptionsAgent] Starting to process streaming response`);
+        console.log(`[BearPutSpreadAgent] Starting to process streaming response`);
         
         try {
           let fullText = '';
           
           // Process the textStream for actual content
           for await (const chunk of result.textStream) {
-            //console.log(`[OptionsAgent] Received text chunk: "${chunk.substring(0, 50)}..."`);
+            //console.log(`[BearPutSpreadAgent] Received text chunk: "${chunk.substring(0, 50)}..."`);
             fullText += chunk;
             yield chunk;
           }
           
-          console.log(`[OptionsAgent] Streaming completed. Total text length: ${fullText.length}`);
+          console.log(`[BearPutSpreadAgent] Streaming completed. Total text length: ${fullText.length}`);
           
           // Log final result if available
           if (result.toolCalls) {
-            console.log(`[OptionsAgent] Tool calls made: ${result.toolCalls.length}`);
+            console.log(`[BearPutSpreadAgent] Tool calls made: ${result.toolCalls.length}`);
           }
           
         } catch (error) {
-          console.error(`[OptionsAgent] Error in streaming response:`, error);
+          console.error(`[BearPutSpreadAgent] Error in streaming response:`, error);
           yield `❌ Error processing response: ${error.message}`;
         }
       }
@@ -135,12 +135,12 @@ class OptionsAgent extends BaseAgent {
         textStream: processStreamingResponse()
       };
     } catch (error) {
-      console.error('[OptionsAgent] Main error:', error);
-      console.error('[OptionsAgent] Main error stack:', error.stack);
+      console.error('[BearPutSpreadAgent] Main error:', error);
+      console.error('[BearPutSpreadAgent] Main error stack:', error.stack);
       
       // Always return an object with textStream property for consistency
       async function* errorStream() {
-        yield `❌ OptionsAgent Error: ${error.message || error}`;
+        yield `❌ BearPutSpreadAgent Error: ${error.message || error}`;
       }
       return {
         textStream: errorStream()
@@ -149,7 +149,7 @@ class OptionsAgent extends BaseAgent {
   }
 }
 
-// System prompt for the Options Agent
+// System prompt for the BearPutSpreadAgent
 const SYSTEM_PROMPT = `You are an advanced Multi-Bear Put Spread Strategy AI specializing in analyzing multiple bear put spread opportunities from available strike price data. Your primary objective is to select and recommend three distinct bear put spread pairs that optimize risk-reward profiles while maintaining strategic diversification.
 
 A bear put spread involves:
@@ -343,4 +343,4 @@ When presenting your analysis to the user, always use the following output struc
 
 Keep your explanations clear, friendly, and focused on helping beginners understand their choices. Do not use jargon or technical language without a simple explanation.`;
 
-module.exports = OptionsAgent;
+module.exports = BearPutSpreadAgent;

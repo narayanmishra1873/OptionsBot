@@ -13,17 +13,17 @@ class OptionChainController {
       const symbol = req.params.symbol || 'NIFTY';
       console.log(`Direct API request for ${symbol} option chain...`);
       
-      // Get the OptionsAgent to fetch data
-      const optionsAgent = this.agentManager.getAgent('OptionsAgent');
+      // Get the BearPutSpreadAgent to fetch data
+      const bearPutSpreadAgent = this.agentManager.getAgent('BearPutSpreadAgent');
       
-      if (!optionsAgent) {
+      if (!bearPutSpreadAgent) {
         return res.status(500).json({
           success: false,
-          error: 'Options agent not available'
+          error: 'BearPutSpread agent not available'
         });
       }
 
-      const optionData = await optionsAgent.getOptionChain(symbol.toUpperCase());
+      const optionData = await bearPutSpreadAgent.getOptionChain(symbol.toUpperCase());
       
       res.json({
         success: true,
