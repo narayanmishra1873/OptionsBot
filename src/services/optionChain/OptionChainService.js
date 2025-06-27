@@ -140,7 +140,7 @@ class OptionChainService {
 
             // Step 2: Find the last expiry of the month two months ahead
             const now = new Date();
-            const targetMonth = now.getMonth() + 2; // 0-based, so +2 for two months ahead
+            const targetMonth = now.getMonth() + 3; // 0-based, so +2 for two months ahead
             const targetYear = now.getFullYear() + Math.floor(targetMonth / 12);
             const normalizedTargetMonth = targetMonth % 12;
 
