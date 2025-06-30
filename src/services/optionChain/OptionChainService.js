@@ -1,125 +1,101 @@
-const https = require('https');
-const zlib = require('zlib');
+const http = require('http');
 
 class OptionChainService {
     constructor() {
-        // Base headers for all requests (matching your Python code exactly)
-        this.baseHeaders = {
-            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
-            'Accept': '*/*',
-            'Accept-Language': 'en-US,en;q=0.9',
-            'Referer': 'https://www.nseindia.com/option-chain',
-            'Accept-Encoding': 'gzip, deflate, br',
-            'Connection': 'keep-alive',
-        };
-    }
-
-    /**
-     * Create a new session for each request group
-     * @returns {Object} - New session object
-     */
-    createNewSession() {
-        return {
-            cookies: {},
-            headers: { ...this.baseHeaders }
-        };
+        // Flask API base URL
+        this.apiBaseUrl = 'http://localhost:5000';
+        
+        // Request timeout settings
+        this.requestTimeout = 30000; // 30 seconds
     }    /**
-     * Get NSE expiry dates for a symbol (matching your Python get_nse_expiry_dates function)
+     * Make HTTP request to Flask API
+     * @param {string} endpoint - API endpoint path
+     * @param {Object} params - Query parameters
+     * @returns {Promise<Object>} - API response
+     */
+    async makeApiRequest(endpoint, params = {}) {
+        return new Promise((resolve, reject) => {
+            // Build URL with query parameters
+            const url = new URL(endpoint, this.apiBaseUrl);
+            Object.entries(params).forEach(([key, value]) => {
+                if (value !== undefined && value !== null) {
+                    url.searchParams.append(key, value);
+                }
+            });
+
+            const options = {
+                hostname: url.hostname,
+                port: url.port || 5000,
+                path: url.pathname + url.search,
+                method: 'GET',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Accept': 'application/json'
+                },
+                timeout: this.requestTimeout
+            };
+
+            console.log(`Making API request to: ${url.toString()}`);
+
+            const req = http.request(options, (res) => {
+                let data = '';
+
+                res.on('data', (chunk) => {
+                    data += chunk;
+                });
+
+                res.on('end', () => {
+                    try {
+                        const jsonData = JSON.parse(data);
+                        
+                        if (res.statusCode >= 200 && res.statusCode < 300) {
+                            if (jsonData.success === false) {
+                                reject(new Error(jsonData.error || 'API request failed'));
+                            } else {
+                                resolve(jsonData);
+                            }
+                        } else {
+                            reject(new Error(`HTTP ${res.statusCode}: ${jsonData.error || 'Request failed'}`));
+                        }
+                    } catch (error) {
+                        console.error('Failed to parse API response:', data.substring(0, 200));
+                        reject(new Error('Invalid JSON response from API'));
+                    }
+                });
+            });
+
+            req.on('error', (error) => {
+                console.error('API request error:', error);
+                reject(new Error(`API request failed: ${error.message}`));
+            });
+
+            req.on('timeout', () => {
+                req.destroy();
+                reject(new Error('API request timeout'));
+            });
+
+            req.setTimeout(this.requestTimeout);
+            req.end();
+        });
+    }    /**
+     * Get NSE expiry dates for a symbol using Flask API
      * @param {string} symbol - The symbol to fetch expiry dates for
      * @returns {Promise<Array>} - Array of expiry dates
      */
     async getNSEExpiryDates(symbol = 'NIFTY') {
-        const session = this.createNewSession(); // Create new session for this request
-        
         try {
             console.log(`Fetching expiry dates for ${symbol}...`);
             
-            // Step 1: Establish session
-            await this.makeHttpRequestWithSession('https://www.nseindia.com', session);
-            await this.makeHttpRequestWithSession('https://www.nseindia.com/option-chain', session);
+            const response = await this.makeApiRequest('/api/expiry-dates', { symbol });
             
-            // Step 2: Get expiry dates
-            const url = 'https://www.nseindia.com/api/option-chain-contract-info';
-            const data = await this.makeHttpRequestWithParamsAndSession(url, { symbol }, session);
-            
-            if (!data || !data.expiryDates) {
-                throw new Error('Invalid response from NSE contract info API');
+            if (!response.expiryDates || !Array.isArray(response.expiryDates)) {
+                throw new Error('Invalid expiry dates response from API');
             }
             
-            // Sort expiry dates (first one is current expiry)
-            const expiryDates = data.expiryDates.sort((a, b) => {
-                const dateA = new Date(a.split('-').reverse().join('-'));
-                const dateB = new Date(b.split('-').reverse().join('-'));
-                return dateA - dateB;
-            });
-            
-            console.log(`Found ${expiryDates.length} expiry dates for ${symbol}`);
-            return expiryDates;
+            console.log(`Found ${response.expiryDates.length} expiry dates for ${symbol}`);
+            return response.expiryDates;
         } catch (error) {
             console.error('Error fetching expiry dates:', error.message);
-            throw error;
-        }
-    }    /**
-     * Fetch option chain data for specific expiry (matching your Python fetch_and_clean_option_chain function)
-     * @param {string} symbol - The symbol to fetch option chain for
-     * @param {string} expiry - The expiry date in DD-MMM-YYYY format
-     * @returns {Promise<Object>} - Option chain data with CE and PE arrays
-     */
-    async fetchOptionChainForExpiry(symbol = 'NIFTY', expiry) {
-        const session = this.createNewSession(); // Create new session for this request
-        
-        try {
-            console.log(`Fetching option chain for ${symbol} expiry: ${expiry}`);
-            
-            // Step 1: Establish session (exactly like your Python code)
-            await this.makeHttpRequestWithSession('https://www.nseindia.com', session);
-            await this.makeHttpRequestWithSession('https://www.nseindia.com/option-chain', session);
-            
-            // Small delay to ensure session is established
-            await new Promise(resolve => setTimeout(resolve, 1000));
-            
-            // Step 2: Get option chain data for specific expiry
-            const url = 'https://www.nseindia.com/api/option-chain-v3';
-            const params = {
-                type: 'Indices',
-                symbol: symbol,
-                expiry: expiry
-            };
-            
-            const data = await this.makeHttpRequestWithParamsAndSession(url, params, session);
-            
-            if (!data || !data.records) {
-                throw new Error('Invalid response from NSE option chain API');
-            }
-            
-            const underlyingValue = data.records.underlyingValue || 0;
-            console.log(`${underlyingValue} is the underlying value for expiry ${expiry}`);
-            
-            const ceList = [];
-            const peList = [];
-            
-            // Filter CE and PE options (matching your Python logic)
-            for (const entry of data.records.data || []) {
-                if (entry.CE && this.isValidOption(entry.CE)) {
-                    ceList.push(entry.CE);
-                }
-                if (entry.PE && this.isValidOption(entry.PE)) {
-                    peList.push(entry.PE);
-                }
-            }
-            
-            console.log(`Found ${ceList.length} CE options and ${peList.length} PE options`);
-            
-            return {
-                symbol: symbol,
-                expiry: expiry,
-                underlyingValue: underlyingValue,
-                timestamp: new Date().toISOString(),
-                ceOptions: ceList,
-                peOptions: peList
-            };
-        } catch (error) {
-            console.error('Error fetching option chain for expiry:', error.message);
             throw error;
         }
     }
@@ -131,6 +107,9 @@ class OptionChainService {
      */
     async getOptionChain(symbol = 'NIFTY') {
         try {
+            // Step 0: Ensure Flask API server is running
+            await this.ensureApiServerRunning();
+
             // Step 1: Get all expiry dates
             const expiryDates = await this.getNSEExpiryDates(symbol);
             
@@ -187,7 +166,8 @@ class OptionChainService {
                 currentExpiry: targetExpiry,
                 atmStrike: atmStrike,
                 timestamp: optionData.timestamp,
-                optionData: relevantStrikes
+                optionData: relevantStrikes,
+                marketData: optionData.marketData
             };
         } catch (error) {
             console.error('Error fetching option chain:', error.message);
@@ -196,150 +176,59 @@ class OptionChainService {
     }
 
     /**
+     * Check if Flask API is running and healthy
+     * @returns {Promise<Object>} - Health check result
+     */
+    async checkApiHealth() {
+        try {
+            const response = await this.makeApiRequest('/');
+            return {
+                healthy: true,
+                version: response.version || '1.0.0',
+                service: response.service || 'NSE Options API',
+                endpoints: response.endpoints || []
+            };
+        } catch (error) {
+            console.error('API health check failed:', error.message);
+            return {
+                healthy: false,
+                error: error.message
+            };
+        }
+    }
+
+    /**
+     * Start Flask API server if not running
+     * @returns {Promise<boolean>} - True if server is running or was started successfully
+     */
+    async ensureApiServerRunning() {
+        try {
+            const health = await this.checkApiHealth();
+            if (health.healthy) {
+                console.log('✅ Flask API server is running');
+                return true;
+            }
+        } catch (error) {
+            // API is not running, provide instructions
+            console.error('❌ Flask API server is not running');
+            console.log('📝 To start the Flask API server:');
+            console.log('   1. Navigate to your Flask API directory');
+            console.log('   2. Run: python app.py');
+            console.log('   3. Ensure it\'s running on http://localhost:5000');
+            throw new Error('Flask API server is not running. Please start it first.');
+        }
+        return false;
+    }
+
+    /**
      * Check if option is valid (has lastPrice > 0)
      * @param {Object} option - Option data
      * @returns {boolean} - True if valid option
      */
     isValidOption(option) {
-        return option && option.lastPrice && option.lastPrice > 0;
-    }    /**
-     * Makes HTTP request with specific session and retry logic
-     * @param {string} url - The URL to fetch data from
-     * @param {Object} session - Session object with cookies and headers
-     * @param {number} retries - Number of retries (default: 3)
-     * @returns {Promise<Object>} - Parsed JSON response
-     */
-    async makeHttpRequestWithSession(url, session, retries = 3) {
-        for (let attempt = 1; attempt <= retries; attempt++) {
-            try {
-                console.log(`Attempt ${attempt}/${retries} for ${url}`);
-                const result = await this._singleHttpRequestWithSession(url, session);
-                return result;
-            } catch (error) {
-                console.error(`Attempt ${attempt} failed:`, error.message);
-                
-                if (attempt === retries) {
-                    throw error;
-                }
-                
-                // Wait before retry (exponential backoff)
-                const delay = Math.pow(2, attempt) * 1000 + Math.random() * 1000; // Add jitter
-                console.log(`Waiting ${delay.toFixed(0)}ms before retry...`);
-                await new Promise(resolve => setTimeout(resolve, delay));
-            }
-        }
-    }
-
-    /**
-     * Makes HTTP request with URL parameters and specific session
-     * @param {string} baseUrl - The base URL
-     * @param {Object} params - URL parameters
-     * @param {Object} session - Session object with cookies and headers
-     * @returns {Promise<Object>} - Parsed JSON response
-     */
-    makeHttpRequestWithParamsAndSession(baseUrl, params, session) {
-        const url = new URL(baseUrl);
-        Object.entries(params).forEach(([key, value]) => {
-            url.searchParams.append(key, value);
-        });
-        return this.makeHttpRequestWithSession(url.toString(), session);
-    }
-
-    /**
-     * Single HTTP request implementation with session handling
-     * @param {string} url - The URL to fetch data from
-     * @param {Object} session - Session object with cookies and headers
-     * @returns {Promise<Object>} - Parsed JSON response
-     */
-    _singleHttpRequestWithSession(url, session) {
-        return new Promise((resolve, reject) => {
-            // Prepare headers
-            const headers = { ...session.headers };
-            
-            // Add cookies if available
-            if (Object.keys(session.cookies).length > 0) {
-                const cookieString = Object.entries(session.cookies)
-                    .map(([key, value]) => `${key}=${value}`)
-                    .join('; ');
-                headers['Cookie'] = cookieString;
-            }
-
-            const request = https.get(url, { 
-                headers,
-                timeout: 25000,
-                // Use fresh agent for each request to avoid connection reuse issues
-                agent: new https.Agent({ 
-                    keepAlive: false,
-                    maxSockets: 1,
-                    timeout: 25000,
-                    // Add some randomization to avoid detection
-                    rejectUnauthorized: true
-                })
-            }, (response) => {
-                // Handle cookies from response (like your Python session)
-                if (response.headers['set-cookie']) {
-                    response.headers['set-cookie'].forEach(cookie => {
-                        const [cookiePair] = cookie.split(';');
-                        const [name, value] = cookiePair.split('=');
-                        if (name && value) {
-                            session.cookies[name.trim()] = value.trim();
-                        }
-                    });
-                }
-
-                // Handle compressed responses
-                let stream = response;
-                const encoding = response.headers['content-encoding'];
-                
-                if (encoding === 'gzip') {
-                    stream = response.pipe(zlib.createGunzip());
-                } else if (encoding === 'deflate') {
-                    stream = response.pipe(zlib.createInflate());
-                } else if (encoding === 'br') {
-                    stream = response.pipe(zlib.createBrotliDecompress());
-                }
-
-                let data = '';
-                stream.on('data', (chunk) => {
-                    data += chunk;
-                });
-
-                stream.on('end', () => {
-                    try {
-                        // If it's the homepage or option-chain page request, we don't need to parse JSON
-                        if (url === 'https://www.nseindia.com' || url === 'https://www.nseindia.com/option-chain') {
-                            resolve({ success: true });
-                            return;
-                        }
-                        
-                        const jsonData = JSON.parse(data);
-                        resolve(jsonData);
-                    } catch (error) {
-                        console.error('Failed to parse JSON. Raw response length:', data.length);
-                        console.error('Response starts with:', data.substring(0, 200));
-                        reject(new Error('Failed to parse JSON response'));
-                    }
-                });
-
-                stream.on('error', (error) => {
-                    reject(error);
-                });
-            });
-
-            request.on('error', (error) => {
-                reject(error);
-            });
-
-            request.on('timeout', () => {
-                request.destroy();
-                reject(new Error('Request timeout'));
-            });
-
-            request.setTimeout(25000, () => {
-                request.destroy();
-                reject(new Error('Request timeout'));
-            });
-        });
+        // Handle both direct option object and nested structure
+        const lastPrice = option?.lastPrice || option?.LTP || 0;
+        return option && lastPrice > 0;
     }
 
     /**
@@ -637,6 +526,282 @@ class OptionChainService {
                 }
             };
         });
+    }
+
+    /**
+     * Fetch option chain data for specific expiry using Flask API
+     * @param {string} symbol - The symbol to fetch option chain for
+     * @param {string} expiry - The expiry date in DD-MMM-YYYY format
+     * @returns {Promise<Object>} - Option chain data with CE and PE arrays
+     */
+    async fetchOptionChainForExpiry(symbol = 'NIFTY', expiry) {
+        try {
+            console.log(`Fetching option chain for ${symbol} expiry: ${expiry}`);
+            
+            const response = await this.makeApiRequest('/api/option-chain', { 
+                symbol, 
+                expiry 
+            });
+            
+            if (!response.data) {
+                throw new Error('Invalid option chain response from API');
+            }
+            
+            const { marketData, ceOptions, peOptions } = response.data;
+            const underlyingValue = marketData.underlyingValue || 0;
+            
+            console.log(`${underlyingValue} is the underlying value for expiry ${expiry}`);
+            console.log(`Found ${ceOptions.length} CE options and ${peOptions.length} PE options`);
+            
+            return {
+                symbol: symbol,
+                expiry: expiry,
+                underlyingValue: underlyingValue,
+                timestamp: response.timestamp || new Date().toISOString(),
+                ceOptions: ceOptions,
+                peOptions: peOptions,
+                marketData: marketData
+            };
+        } catch (error) {
+            console.error('Error fetching option chain for expiry:', error.message);
+            throw error;
+        }
+    }
+
+    /**
+     * Get current market data for a symbol using Flask API
+     * @param {string} symbol - The symbol to fetch market data for
+     * @returns {Promise<Object>} - Current market data
+     */
+    async getCurrentMarketData(symbol = 'NIFTY') {
+        try {
+            console.log(`Fetching current market data for ${symbol}...`);
+            
+            const response = await this.makeApiRequest('/api/current-market', { symbol });
+            
+            if (!response.marketData) {
+                throw new Error('Invalid market data response from API');
+            }
+            
+            return {
+                symbol: symbol,
+                underlyingValue: response.marketData.underlyingValue,
+                timestamp: response.timestamp,
+                nearestExpiry: response.nearestExpiry,
+                totCE: response.marketData.totCE,
+                totPE: response.marketData.totPE
+            };
+        } catch (error) {
+            console.error('Error fetching current market data:', error.message);
+            throw error;
+        }
+    }
+
+    /**
+     * Get only CE (Call) options for specific expiry using Flask API
+     * @param {string} symbol - The symbol to fetch options for
+     * @param {string} expiry - The expiry date in DD-MMM-YYYY format
+     * @returns {Promise<Object>} - CE options data
+     */
+    async getCEOptions(symbol = 'NIFTY', expiry) {
+        try {
+            console.log(`Fetching CE options for ${symbol} expiry: ${expiry}`);
+            
+            const response = await this.makeApiRequest('/api/option-chain/ce', { 
+                symbol, 
+                expiry 
+            });
+            
+            if (!response.options) {
+                throw new Error('Invalid CE options response from API');
+            }
+            
+            return {
+                symbol: symbol,
+                expiry: expiry,
+                optionType: 'CE',
+                marketData: response.marketData,
+                options: response.options,
+                count: response.count,
+                timestamp: response.timestamp
+            };
+        } catch (error) {
+            console.error('Error fetching CE options:', error.message);
+            throw error;
+        }
+    }
+
+    /**
+     * Get only PE (Put) options for specific expiry using Flask API
+     * @param {string} symbol - The symbol to fetch options for
+     * @param {string} expiry - The expiry date in DD-MMM-YYYY format
+     * @returns {Promise<Object>} - PE options data
+     */
+    async getPEOptions(symbol = 'NIFTY', expiry) {
+        try {
+            console.log(`Fetching PE options for ${symbol} expiry: ${expiry}`);
+            
+            const response = await this.makeApiRequest('/api/option-chain/pe', { 
+                symbol, 
+                expiry 
+            });
+            
+            if (!response.options) {
+                throw new Error('Invalid PE options response from API');
+            }
+            
+            return {
+                symbol: symbol,
+                expiry: expiry,
+                optionType: 'PE',
+                marketData: response.marketData,
+                options: response.options,
+                count: response.count,
+                timestamp: response.timestamp
+            };
+        } catch (error) {
+            console.error('Error fetching PE options:', error.message);
+            throw error;
+        }
+    }
+
+    /**
+     * Get option chain data for nearest expiry (convenience method)
+     * @param {string} symbol - The symbol to fetch option chain for
+     * @returns {Promise<Object>} - Option chain data with nearest expiry
+     */
+    async getOptionChainNearestExpiry(symbol = 'NIFTY') {
+        try {
+            await this.ensureApiServerRunning();
+            
+            const expiryDates = await this.getNSEExpiryDates(symbol);
+            if (!expiryDates || expiryDates.length === 0) {
+                throw new Error('No expiry dates found');
+            }
+            
+            // Use the first (nearest) expiry
+            const nearestExpiry = expiryDates[0];
+            const optionData = await this.fetchOptionChainForExpiry(symbol, nearestExpiry);
+            
+            const atmStrike = this.findATMStrikeFromLists(optionData.ceOptions, optionData.peOptions, optionData.underlyingValue);
+            const relevantStrikes = this.getRelevantStrikesFromLists(optionData.ceOptions, optionData.peOptions, atmStrike, 5);
+            
+            return {
+                symbol: symbol,
+                underlyingValue: optionData.underlyingValue,
+                currentExpiry: nearestExpiry,
+                atmStrike: atmStrike,
+                timestamp: optionData.timestamp,
+                optionData: relevantStrikes,
+                marketData: optionData.marketData
+            };
+        } catch (error) {
+            console.error('Error fetching option chain for nearest expiry:', error.message);
+            throw error;
+        }
+    }
+
+    /**
+     * Get option chain data for specific expiry (convenience method)
+     * @param {string} symbol - The symbol to fetch option chain for
+     * @param {string} expiry - The expiry date in DD-MMM-YYYY format
+     * @returns {Promise<Object>} - Formatted option chain data
+     */
+    async getOptionChainForSpecificExpiry(symbol = 'NIFTY', expiry) {
+        try {
+            await this.ensureApiServerRunning();
+            
+            const optionData = await this.fetchOptionChainForExpiry(symbol, expiry);
+            const atmStrike = this.findATMStrikeFromLists(optionData.ceOptions, optionData.peOptions, optionData.underlyingValue);
+            const relevantStrikes = this.getRelevantStrikesFromLists(optionData.ceOptions, optionData.peOptions, atmStrike, 5);
+            
+            return {
+                symbol: symbol,
+                underlyingValue: optionData.underlyingValue,
+                currentExpiry: expiry,
+                atmStrike: atmStrike,
+                timestamp: optionData.timestamp,
+                optionData: relevantStrikes,
+                marketData: optionData.marketData
+            };
+        } catch (error) {
+            console.error('Error fetching option chain for specific expiry:', error.message);
+            throw error;
+        }
+    }
+
+    /**
+     * Test Flask API integration (for debugging)
+     * @param {string} symbol - The symbol to test with
+     * @returns {Promise<Object>} - Test results
+     */
+    async testFlaskApiIntegration(symbol = 'NIFTY') {
+        const testResults = {
+            timestamp: new Date().toISOString(),
+            symbol: symbol,
+            tests: {
+                healthCheck: { passed: false, error: null },
+                expiryDates: { passed: false, error: null, count: 0 },
+                currentMarket: { passed: false, error: null },
+                optionChain: { passed: false, error: null }
+            }
+        };
+
+        try {
+            // Test 1: Health Check
+            console.log('🧪 Testing Flask API health check...');
+            const health = await this.checkApiHealth();
+            testResults.tests.healthCheck.passed = health.healthy;
+            if (!health.healthy) {
+                testResults.tests.healthCheck.error = health.error;
+            }
+
+            // Test 2: Expiry Dates
+            console.log('🧪 Testing expiry dates endpoint...');
+            try {
+                const expiries = await this.getNSEExpiryDates(symbol);
+                testResults.tests.expiryDates.passed = Array.isArray(expiries) && expiries.length > 0;
+                testResults.tests.expiryDates.count = expiries.length;
+            } catch (error) {
+                testResults.tests.expiryDates.error = error.message;
+            }
+
+            // Test 3: Current Market Data
+            console.log('🧪 Testing current market data endpoint...');
+            try {
+                const market = await this.getCurrentMarketData(symbol);
+                testResults.tests.currentMarket.passed = market && market.underlyingValue > 0;
+            } catch (error) {
+                testResults.tests.currentMarket.error = error.message;
+            }
+
+            // Test 4: Option Chain (only if expiry dates work)
+            if (testResults.tests.expiryDates.passed) {
+                console.log('🧪 Testing option chain endpoint...');
+                try {
+                    const optionData = await this.getOptionChainNearestExpiry(symbol);
+                    testResults.tests.optionChain.passed = optionData && optionData.optionData && optionData.optionData.length > 0;
+                } catch (error) {
+                    testResults.tests.optionChain.error = error.message;
+                }
+            }
+
+            // Summary
+            const passedTests = Object.values(testResults.tests).filter(test => test.passed).length;
+            const totalTests = Object.keys(testResults.tests).length;
+            
+            console.log(`\n📊 Test Summary: ${passedTests}/${totalTests} tests passed`);
+            Object.entries(testResults.tests).forEach(([testName, result]) => {
+                const status = result.passed ? '✅' : '❌';
+                console.log(`   ${status} ${testName}: ${result.passed ? 'PASSED' : `FAILED - ${result.error}`}`);
+            });
+
+            return testResults;
+
+        } catch (error) {
+            console.error('❌ Flask API integration test failed:', error.message);
+            throw error;
+        }
     }
 }
 
