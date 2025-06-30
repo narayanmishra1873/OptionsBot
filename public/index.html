@@ -338,6 +338,66 @@
                 padding: 4px 2px;
             }
         }
+
+        /* Percentage buttons styling */
+        .percentage-buttons {
+            padding: 15px 20px 10px;
+            border-top: 1px solid #eee;
+            display: flex;
+            flex-wrap: wrap;
+            gap: 8px;
+            justify-content: center;
+            align-items: center;
+        }
+
+        .percentage-label {
+            font-size: 14px;
+            color: #666;
+            font-weight: 500;
+            margin-right: 10px;
+        }
+
+        .percentage-btn {
+            padding: 8px 16px;
+            background: #f8f9fa;
+            color: #667eea;
+            border: 2px solid #667eea;
+            border-radius: 20px;
+            cursor: pointer;
+            font-size: 14px;
+            font-weight: 600;
+            transition: all 0.3s;
+            min-width: 50px;
+        }
+
+        .percentage-btn:hover {
+            background: #667eea;
+            color: white;
+            transform: translateY(-2px);
+            box-shadow: 0 4px 8px rgba(102, 126, 234, 0.3);
+        }
+
+        .percentage-btn:active {
+            transform: translateY(0);
+        }
+
+        @media (max-width: 768px) {
+            .percentage-buttons {
+                padding: 10px 15px 5px;
+                gap: 6px;
+            }
+            
+            .percentage-btn {
+                padding: 6px 12px;
+                font-size: 12px;
+                min-width: 40px;
+            }
+            
+            .percentage-label {
+                font-size: 12px;
+                margin-right: 5px;
+            }
+        }
     </style>
 </head>
 <body>
@@ -358,12 +418,20 @@
                 <span></span>
             </div>
         </div>
+        <div class="percentage-buttons">
+            <span class="percentage-label">Quick Options:</span>
+            <button class="percentage-btn" onclick="sendPercentageMessage(5)">5%</button>
+            <button class="percentage-btn" onclick="sendPercentageMessage(8)">8%</button>
+            <button class="percentage-btn" onclick="sendPercentageMessage(10)">10%</button>
+            <button class="percentage-btn" onclick="sendPercentageMessage(12)">12%</button>
+            <button class="percentage-btn" onclick="sendPercentageMessage(15)">15%</button>
+        </div>
         <div class="chat-input-container">
             <input 
                 type="text" 
                 class="chat-input" 
                 id="chatInput" 
-                placeholder="Type your message here..."
+                placeholder="I expect market to drop X%. Suggest me option strategies."
                 onkeypress="handleKeyPress(event)"
             >
             <button class="send-button" id="sendButton" onclick="sendMessage()">
@@ -498,6 +566,12 @@
                 event.preventDefault();
                 sendMessage();
             }
+        }
+
+        function sendPercentageMessage(percentage) {
+            const message = `I expect market to drop ${percentage}%. Suggest me option strategies.`;
+            chatInput.value = message;
+            sendMessage();
         }
 
         async function clearChat() {

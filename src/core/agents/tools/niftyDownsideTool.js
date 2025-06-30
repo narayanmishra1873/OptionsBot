@@ -55,9 +55,9 @@ async function calculateExpectedNifty({ symbol, expectedPercentage, expectedNift
       closestIdx = i;
     }
   }
-  // Select up to 9 strikes: 4 below, the closest, 4 above (handle edges)
-  const start = Math.max(0, closestIdx - 4);
-  const end = Math.min(strikePrices.length, closestIdx + 5);
+  // Select up to 13 strikes: 6 below, the closest, 6 above (handle edges)
+  const start = Math.max(0, closestIdx - 6);
+  const end = Math.min(strikePrices.length, closestIdx + 7);
   const surroundingStrikes = strikePrices.slice(start, end);
   console.log(`[niftyDownsideTool] Selected surrounding strikes: ${surroundingStrikes.join(', ')}`);
 
