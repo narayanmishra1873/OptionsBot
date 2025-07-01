@@ -147,6 +147,8 @@ class BearPutSpreadAgent extends BaseAgent {
       };
     }
   }
+
+
 }
 
 // System prompt for the BearPutSpreadAgent
@@ -188,6 +190,15 @@ BEAR PUT SPREAD BASICS:
 - **Example**: If current Nifty 25,000, expected 22,000 → Buy 22500 Put, Sell 21500 Put (not 24000/22000)
 - **Work with Available Data**: Use the 13 provided strikes optimally, position around expected value
 
+**CANDIDATE GENERATION:**
+- When generating candidate spreads, always check if long put LTP < short put LTP. If so, mark as "Net Credit Opportunity" and include in the debug output and summary, regardless of breakeven.
+- **Before passing candidate spreads to the analyzeBearPutSpreads tool, always prioritize and order the spreads as follows:**
+  1. **Net Credit Opportunities First:** Spreads where the long put LTP < short put LTP (net credit). These must always be shown first in the output and summary, regardless of other criteria.
+  2. **Long Put Strike > Expected Nifty:** Next, include spreads where the long put strike is greater than the expected Nifty value. These should be ranked above those with long put strike ≤ expected Nifty.
+  3. **Other Valid Spreads:** All other spreads.
+  4. **Within Each Group:** Sort by maximizing reward-to-risk (profit/loss) ratio (highest first), then by minimizing net debit (lowest first).
+- This ordering must be applied to the spreads array before calling analyzeBearPutSpreads, so that the tool receives the prioritized list and the output/summary always reflects this order.
+
 **CONCRETE EXAMPLE OF GOOD CANDIDATE GENERATION:**
 - **Scenario**: Current Nifty 25,000, Expected 22,000, Available liquid strikes: [21000, 21100, 21200, 21300, 21400, 21500, 21600, 21700, 21800, 21900, 22000, 22100, 22200]
 - **GOOD Candidates** (positioned near expected 22,000):
@@ -210,6 +221,15 @@ TOOLS AVAILABLE:
 - calculateExpectedNifty: Fetch live option chain data
 - analyzeBearPutSpreads: Calculate all spread metrics (use for ALL calculations)
 
+🆕 **ENHANCED STRIKE SELECTION LOGIC**
+- Select spread pairs so that most have breakeven greater than the expected Nifty value.
+- Maximize profit/loss ratio and minimize net debit for each spread.
+- If the LTP (last traded price) of the long put (higher strike) is less than the LTP of the short put (lower strike), this is a net credit opportunity. Always detect and highlight these, even if breakeven ≤ expected Nifty.
+- Use a variety of spread widths around the expected value, but avoid far OTM strikes.
+- After filtering, rank spreads by:  (1) highest profit/loss ratio, (2) breakeven > expected Nifty and closest to it, (3) lowest net debit, (4) net credit opportunities (always highlight).
+- In the debug table, add a "Net Credit?" column and highlight any such cases.
+- In the summary, mention if a net credit spread is found.
+
 WORKFLOW:
 1. Use calculateExpectedNifty to get market data (provides 13 strikes around expected value)
 2. **APPLY FILTERING RULES ABOVE**: Eliminate ALL strikes with Volume <50 OR OI <400
@@ -223,9 +243,8 @@ WORKFLOW:
 5. Use analyzeBearPutSpreads tool to calculate metrics for all 5 spreads
 6. **RANKING CRITERIA - FUNDAMENTAL TRADING OBJECTIVES**: 
    - **PRIORITY 1**: Breakeven > Expected Value (MANDATORY for consideration)
-   - **PRIORITY 2**: Breakeven CLOSEST to Expected Value (optimal positioning, not maximized)
-   - **PRIORITY 3**: Maximize Risk/Reward Ratio (higher R/R = better profit potential)
-   - **PRIORITY 4**: Minimize Net Debit (lower cost = better capital efficiency)
+   - **PRIORITY 2**: Maximize Reward/Risk(Profit/Loss) Ratio (higher R/R = better profit potential)
+   - **PRIORITY 3**: Minimize Net Debit (lower cost = better capital efficiency)
 7. **SELECT TOP 3**: Present only the best 3 spreads from the 5 analyzed
 8. **FINAL VERIFICATION**: Verify every recommended strike passed liquidity filter
 
@@ -249,7 +268,7 @@ WORKFLOW:
 2. Calculate all metrics using analyzeBearPutSpreads tool
 3. **FILTERING**: Only consider spreads where breakeven > Expected Value
 4. **RANKING METHODOLOGY** for filtered spreads:
-   - **Step 1**: Primary sort by Risk/Reward Ratio (HIGHEST first) - profit priority
+   - **Step 1**: Primary sort by Reward/Risk Ratio (Profit/Loss Ratio) (HIGHEST first) - profit priority
    - **Step 2**: Secondary sort by breakeven CLOSEST to Expected Value (optimal positioning)
    - **Step 3**: Tertiary sort by Net Debit (LOWEST first) - cost efficiency
    - **Logic**: Prioritizes optimal positioning (breakeven near target), then profit potential, then cost
@@ -258,7 +277,7 @@ WORKFLOW:
 7. Select TOP 3 from the sorted list for final recommendations
 
 **SORTING RULES:**
-- **Primary Group**: breakeven > Expected Nifty → Sort by breakeven CLOSEST to Expected Nifty → R/R (desc) → Net Debit (asc)
+- **Primary Group**: breakeven > Expected Nifty → Sort by Profit/Loss Ratio (desc) → Net Debit (asc)
 - **Secondary Group**: breakeven ≤ Expected Nifty → Sort by breakeven (descending)
 - **Selection**: Pick TOP 3 from this sorted order
 - **MULTI-CRITERIA**: breakeven near expected Nifty (optimal), then R/R (profit), then cost (efficiency)
