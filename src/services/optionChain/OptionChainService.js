@@ -112,49 +112,54 @@ class OptionChainService {
 
             // Step 1: Get all expiry dates
             const expiryDates = await this.getNSEExpiryDates(symbol);
-            
             if (!expiryDates || expiryDates.length === 0) {
                 throw new Error('No expiry dates found');
             }
 
-            // Step 2: Find the last expiry of the month two months ahead
+            // Step 2: Try to find expiry for 3 months ahead, then 2, then 1, then current month
             const now = new Date();
-            const targetMonth = now.getMonth() + 3; // 0-based, so +2 for two months ahead
-            const targetYear = now.getFullYear() + Math.floor(targetMonth / 12);
-            const normalizedTargetMonth = targetMonth % 12;
+            let foundExpiry = null;
+            let foundMonth = null;
+            for (let monthOffset = 3; monthOffset >= 0; monthOffset--) {
+                const targetMonth = now.getMonth() + monthOffset;
+                const targetYear = now.getFullYear() + Math.floor(targetMonth / 12);
+                const normalizedTargetMonth = targetMonth % 12;
 
-            // Parse expiry dates and filter for the target month/year
-            const expiryObjs = expiryDates.map(dateStr => {
-                // Handles both DD-MMM-YYYY and YYYY-MM-DD
-                let parts = dateStr.includes('-') ? dateStr.split('-') : [];
-                let dateObj;
-                if (parts.length === 3 && isNaN(parts[0])) {
-                    // e.g. 27-JUN-2025
-                    dateObj = new Date(`${parts[2]}-${parts[1]}-${parts[0]}`);
-                } else {
-                    // fallback
-                    dateObj = new Date(dateStr);
+                // Parse expiry dates and filter for the target month/year
+                const expiryObjs = expiryDates.map(dateStr => {
+                    let parts = dateStr.includes('-') ? dateStr.split('-') : [];
+                    let dateObj;
+                    if (parts.length === 3 && isNaN(parts[0])) {
+                        // e.g. 27-JUN-2025
+                        dateObj = new Date(`${parts[2]}-${parts[1]}-${parts[0]}`);
+                    } else {
+                        dateObj = new Date(dateStr);
+                    }
+                    return { dateStr, dateObj };
+                });
+
+                // Filter for target month/year
+                const filtered = expiryObjs.filter(({ dateObj }) =>
+                    dateObj.getMonth() === normalizedTargetMonth && dateObj.getFullYear() === targetYear
+                );
+
+                if (filtered.length > 0) {
+                    // Pick the latest expiry in that month
+                    const lastExpiry = filtered.reduce((latest, curr) =>
+                        curr.dateObj > latest.dateObj ? curr : latest
+                    );
+                    foundExpiry = lastExpiry.dateStr;
+                    foundMonth = normalizedTargetMonth;
+                    break;
                 }
-                return { dateStr, dateObj };
-            });
-
-            // Filter for target month/year
-            const filtered = expiryObjs.filter(({ dateObj }) =>
-                dateObj.getMonth() === normalizedTargetMonth && dateObj.getFullYear() === targetYear
-            );
-
-            if (filtered.length === 0) {
-                throw new Error('No expiry found for two months ahead');
             }
 
-            // Pick the latest expiry in that month
-            const lastExpiry = filtered.reduce((latest, curr) =>
-                curr.dateObj > latest.dateObj ? curr : latest
-            );
-            const targetExpiry = lastExpiry.dateStr;
+            if (!foundExpiry) {
+                throw new Error('No expiry found for the next 3 months or earlier');
+            }
 
             // Step 3: Get option chain data for the selected expiry
-            const optionData = await this.fetchOptionChainForExpiry(symbol, targetExpiry);
+            const optionData = await this.fetchOptionChainForExpiry(symbol, foundExpiry);
 
             // Step 4: Find ATM and get relevant strikes
             const atmStrike = this.findATMStrikeFromLists(optionData.ceOptions, optionData.peOptions, optionData.underlyingValue);
@@ -163,7 +168,7 @@ class OptionChainService {
             return {
                 symbol: symbol,
                 underlyingValue: optionData.underlyingValue,
-                currentExpiry: targetExpiry,
+                currentExpiry: foundExpiry,
                 atmStrike: atmStrike,
                 timestamp: optionData.timestamp,
                 optionData: relevantStrikes,
