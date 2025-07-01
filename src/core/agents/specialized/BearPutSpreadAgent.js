@@ -249,8 +249,8 @@ WORKFLOW:
 2. Calculate all metrics using analyzeBearPutSpreads tool
 3. **FILTERING**: Only consider spreads where breakeven > Expected Value
 4. **RANKING METHODOLOGY** for filtered spreads:
-   - **Step 1**: Primary sort by breakeven CLOSEST to Expected Value (optimal positioning)
-   - **Step 2**: Secondary sort by Risk/Reward Ratio (HIGHEST first) - profit priority  
+   - **Step 1**: Primary sort by Risk/Reward Ratio (HIGHEST first) - profit priority
+   - **Step 2**: Secondary sort by breakeven CLOSEST to Expected Value (optimal positioning)
    - **Step 3**: Tertiary sort by Net Debit (LOWEST first) - cost efficiency
    - **Logic**: Prioritizes optimal positioning (breakeven near target), then profit potential, then cost
 5. **FALLBACK**: If no spreads have breakeven > Expected Value, sort by breakeven (descending)
