@@ -361,8 +361,41 @@ Data Timestamp: [time]
 - **LOGIC**: Optimal positioning (breakeven near expected Nifty), then profit (high Reward/Risk), then efficiency (low cost)
 
 ### 📊 TOP 3 SELECTION
-**Ranking Methodology:** breakeven > Expected Value → Sort by breakeven CLOSEST to Expected Nifty → Reward/Risk (desc) → Net Debit (asc)
-**Selected Spreads:** [List top 3 with reasoning for optimal positioning selection]
+**STEP-BY-STEP SELECTION PROCESS:**
+
+**STEP 1: SPECIAL PRIORITY FILTERING**
+- **Net Credit Spreads**: Any spreads where Long Put LTP < Short Put LTP get AUTOMATIC TOP PRIORITY regardless of other criteria
+- **Long Put > Expected Nifty**: Spreads where Long Put Strike > Expected Nifty get HIGHER PRIORITY than those where Long Put Strike ≤ Expected Nifty
+
+**STEP 2: MANDATORY FILTERING**  
+- **Primary Filter**: Only consider spreads where Breakeven > Expected Nifty (MANDATORY requirement)
+- **Fallback Rule**: If NO spreads pass primary filter, use ALL spreads sorted by Breakeven (descending)
+
+**STEP 3: MULTI-CRITERIA SORTING** (for spreads that pass Step 2)
+- **Primary Sort**: Reward/Risk Ratio (Profit/Loss Ratio) - HIGHEST first (profit optimization)
+- **Secondary Sort**: Breakeven CLOSEST to Expected Nifty (optimal positioning) 
+- **Tertiary Sort**: Net Debit - LOWEST first (cost efficiency)
+- **Width Consideration**: Ensure variety of spread widths (narrow/medium/wide) in final selection
+
+**STEP 4: FINAL SELECTION**
+- Select TOP 3 spreads from the sorted list
+- **Ranking Labels**: Strategy 1 (Best), Strategy 2 (Better), Strategy 3 (Good)
+- **Justification Required**: Explain WHY each spread was selected based on the multi-criteria scoring
+
+**SELECTION METHODOLOGY SUMMARY:**
+
+IF Net Credit Spreads exist → Prioritize these first
+THEN IF Long Put > Expected Nifty → Rank higher  
+THEN IF Breakeven > Expected Nifty → Include in candidates
+THEN Sort by: Reward/Risk (desc) → Breakeven closest to Expected → Net Debit (asc)
+FINALLY Select TOP 3 with reasoning
+
+
+**Selected Spreads:** [List top 3 with detailed reasoning including:]
+- Why this spread was selected (net credit? high reward/risk? optimal breakeven?)
+- How it ranked in the multi-criteria evaluation
+- What spread width category it represents (narrow/medium/wide)
+- Specific numerical justification (breakeven distance, reward/risk ratio, net debit)
 
 ### ✅ COMPLIANCE CHECK
 - All recommended strikes pass liquidity criteria ✓
