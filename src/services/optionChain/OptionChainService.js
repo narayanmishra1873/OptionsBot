@@ -8,12 +8,34 @@ class OptionChainService {
         // Request timeout settings
         this.requestTimeout = 30000; // 30 seconds
     }    /**
-     * Make HTTP request to Flask API
+     * Make HTTP request to Flask API with up to 3 retries on failure
      * @param {string} endpoint - API endpoint path
      * @param {Object} params - Query parameters
      * @returns {Promise<Object>} - API response
      */
     async makeApiRequest(endpoint, params = {}) {
+        const maxRetries = 3;
+        let attempt = 0;
+        let lastError;
+        while (attempt < maxRetries) {
+            try {
+                return await this._makeApiRequestOnce(endpoint, params);
+            } catch (err) {
+                lastError = err;
+                attempt++;
+                if (attempt < maxRetries) {
+                    console.warn(`API request failed (attempt ${attempt}): ${err.message}. Retrying...`);
+                    await new Promise(res => setTimeout(res, 500 * attempt)); // Exponential backoff
+                }
+            }
+        }
+        throw new Error(`API request failed after ${maxRetries} attempts: ${lastError.message}`);
+    }
+
+    /**
+     * Internal single-attempt API request (original logic)
+     */
+    async _makeApiRequestOnce(endpoint, params = {}) {
         return new Promise((resolve, reject) => {
             // Build URL with query parameters
             const url = new URL(endpoint, this.apiBaseUrl);

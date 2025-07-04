@@ -8,7 +8,7 @@ function analyzeBearPutSpreads(spreads, capital = 100000) {
   console.log('[analyzeBearPutSpreads] Called with spreads:', JSON.stringify(spreads, null, 2));
   console.log('[analyzeBearPutSpreads] Capital for risk calculations:', capital);
   const results = spreads.map((spread, idx) => {
-    const { longPut, shortPut } = spread;
+    const { longPut, shortPut, expectedNifty } = spread;
     const lotSize = longPut.lotSize || 75; // default lot size
     const strikeDiff = Number((longPut.strike - shortPut.strike).toFixed(2));
     const netDebit = Number(((longPut.premium - shortPut.premium) * lotSize).toFixed(2));
@@ -28,6 +28,11 @@ function analyzeBearPutSpreads(spreads, capital = 100000) {
     const ivOk = longPut.iv < 40; // avoid very high IV
     // Risk as % of capital
     const riskPct = Number(((maxLoss / capital) * 100).toFixed(2));
+    // Breakeven distance (if expectedNifty provided)
+    let breakevenDistance = null;
+    if (typeof expectedNifty === 'number') {
+      breakevenDistance = Number((breakeven - expectedNifty).toFixed(2));
+    }
     const metrics = {
       netDebit,
       maxProfit,
@@ -41,7 +46,8 @@ function analyzeBearPutSpreads(spreads, capital = 100000) {
       ivOk,
       riskPct,
       lotSize,
-      strikeDiff
+      strikeDiff,
+      breakevenDistance
     };
     console.log(`[analyzeBearPutSpreads] Spread #${idx + 1} metrics:`, metrics);
     return {

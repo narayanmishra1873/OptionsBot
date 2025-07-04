@@ -71,11 +71,33 @@ class BearPutSpreadAgent extends BaseAgent {
                 oi: z.number(),
                 iv: z.number().optional(),
                 lotSize: z.number().optional()
-              })
+              }),
+              expectedNifty: z.number().optional()
             })),
             capital: z.number().optional().describe('Total capital for risk calculations (default 100000)')
           }),
           execute: async ({ spreads, capital }) => {
+            // Inject expectedNifty into each spread if available from context
+            let expectedNifty = null;
+            // Try to extract expectedNifty from the first spread if present, or from a higher context if available
+            if (spreads && spreads.length > 0) {
+              // If any spread already has expectedNifty, use it
+              for (const s of spreads) {
+                if (typeof s.expectedNifty === 'number') {
+                  expectedNifty = s.expectedNifty;
+                  break;
+                }
+              }
+            }
+            // If not present, try to get from BearPutSpreadAgent context (this.expectedNiftyValue or similar)
+            if (!expectedNifty && this && typeof this.expectedNiftyValue === 'number') {
+              expectedNifty = this.expectedNiftyValue;
+            }
+            // If still not present, try to get from conversationHistory or message context (not implemented here)
+            // If found, inject into all spreads
+            if (expectedNifty !== null) {
+              spreads = spreads.map(s => ({ ...s, expectedNifty }));
+            }
             return analyzeBearPutSpreads(spreads, capital);
           }
         })
@@ -213,7 +235,7 @@ SECTION 3: CANDIDATE GENERATION
   - **1 WIDE spread**: 250-300 point widths (higher cost, higher profit potential)
 - **Before passing candidate spreads to the analyzeBearPutSpreads tool, always prioritize and order the spreads as follows:**
   1. **Net Credit Opportunities First:** Spreads where the long put LTP < short put LTP (net credit). These must always be shown first in the output and summary, regardless of other criteria.
-  2. **Long Put Strike > Expected Nifty:** Next, include spreads where the long put strike is greater than the expected Nifty value. These should be ranked above those with long put strike ≤ expected Nifty.
+  2. **Long Put Strike > Expected Nifty (MANDATORY):** Only include spreads where the long put strike is strictly greater than the expected Nifty value. Filter out all spreads where this is not true.
   3. **Other Valid Spreads:** All other spreads.
   4. **Within Each Group:** Sort by maximizing reward-to-risk (profit/loss) ratio (highest first), then by minimizing net debit (lowest first).
 - This ordering must be applied to the spreads array before calling analyzeBearPutSpreads, so that the tool receives the prioritized list and the output/summary always reflects this order.
@@ -221,11 +243,11 @@ SECTION 3: CANDIDATE GENERATION
 **CONCRETE EXAMPLE OF GOOD CANDIDATE GENERATION WITH VARIABLE SPREADS:**
 - **Scenario**: Current Nifty 25,000, Expected 22,000, Available liquid strikes: [21000, 21100, 21200, 21300, 21400, 21500, 21600, 21700, 21800, 21900, 22000, 22100, 22200]
 - **GOOD Candidates** (positioned near expected 22,000 with VARIABLE spread widths):
-  1. 22200/22100 (Long=22200, Short=22100, Width=100, breakeven≈22150) - **NARROW spread**
-  2. 22100/22000 (Long=22100, Short=22000, Width=100, breakeven≈22050) - **NARROW spread**  
-  3. 22200/21900 (Long=22200, Short=21900, Width=300, breakeven≈21950) - **WIDE spread**
-  4. 22000/21800 (Long=22000, Short=21800, Width=200, breakeven≈21850) - **MEDIUM spread**
-  5. 22100/21950 (Long=22100, Short=21950, Width=150, breakeven≈21975) - **MEDIUM spread**
+  1. 22200/22100 (Long=22200, Short=22100, Width=100, breakeven≈[tool]) - **NARROW spread**
+  2. 22100/22000 (Long=22100, Short=22000, Width=100, breakeven≈[tool]) - **NARROW spread**  
+  3. 22200/21900 (Long=22200, Short=21900, Width=300, breakeven≈[tool]) - **WIDE spread**
+  4. 22000/21800 (Long=22000, Short=21800, Width=200, breakeven≈[tool]) - **MEDIUM spread**
+  5. 22100/21950 (Long=22100, Short=21950, Width=150, breakeven≈[tool]) - **MEDIUM spread**
 - **SPREAD WIDTH VARIETY**: 100, 100, 150, 200, 300 points (mix of narrow, medium, wide)
 - **BAD Candidates** (far from expected value):
   × 21300/21200 (breakeven≈21250, too far below expected 22,000)
@@ -243,6 +265,7 @@ SECTION 4: ANALYSIS
 **RESPONSIBILITY**: Calculate all metrics for the 5 candidate spreads
 
 **TOOL CALL**: Pass the 5 candidate spreads to analyzeBearPutSpreads to calculate all metrics (net debit, max profit, max loss, breakeven, risk-reward, etc).
+
 
 ============================
 SECTION 5: SELECTION & RANKING  
@@ -346,16 +369,18 @@ Data Timestamp: [time]
 
 ### 📊 ALL 5 SPREADS ANALYSIS
 **IMPORTANT: For each spread, you MUST calculate breakeven using the formula: breakeven = Long Put Strike - Net Debit. Also, print the Expected Nifty value in the table for each row. Calculate breakeven distance as breakeven - Expected Nifty. If breakeven distance is positive (>0), then status is 'VALID' and 'breakeven > Expected Nifty?' is 'YES'. If breakeven distance is zero or negative (≤0), then status is 'INVALID' and 'breakeven > Expected Nifty?' is 'NO'. This logic must be strictly numeric and shown in the table. Only spreads with status 'VALID' are eligible for top 3 selection. Always show the actual numbers for breakeven, Expected Nifty, and breakeven distance in the table and debug output.**
-| # | Long | Short | Net Debit | Max Profit | R:R | Breakeven | Expected Nifty50 | Breakeven Distance | Breakeven > Expected Nifty50? | Status |
-|---|------|-------|-----------|------------|-----|-----------|---------------|--------------------|--------------------------|--------|
-| 1 | [X]  | [Y]   | ₹[Amount] | ₹[Amount]  |[X:1]| [Price]   | [ExpNifty]    | [breakeven-ExpNifty] | YES/NO                   | [Status] |
-| 2 | [X]  | [Y]   | ₹[Amount] | ₹[Amount]  |[X:1]| [Price]   | [ExpNifty]    | [breakeven-ExpNifty] | YES/NO                   | [Status] |
-| 3 | [X]  | [Y]   | ₹[Amount] | ₹[Amount]  |[X:1]| [Price]   | [ExpNifty]    | [breakeven-ExpNifty] | YES/NO                   | [Status] |
-| 4 | [X]  | [Y]   | ₹[Amount] | ₹[Amount]  |[X:1]| [Price]   | [ExpNifty]    | [breakeven-ExpNifty] | YES/NO                   | [Status] |
-| 5 | [X]  | [Y]   | ₹[Amount] | ₹[Amount]  |[X:1]| [Price]   | [ExpNifty]    | [breakeven-ExpNifty] | YES/NO                   | [Status] |
+
+**IMPORTANT: For each spread, you MUST NOT calculate breakeven manually. Breakeven must be calculated and provided ONLY by the analyzeBearPutSpreads tool. Do NOT use the formula breakeven = Long Put Strike - Net Debit in the table or logic. Always display the breakeven value as returned by the tool. Only spreads with long put strike > expected Nifty and breakeven > expected Nifty are eligible for top 3 selection. Always show the actual numbers for breakeven, Expected Nifty, and breakeven distance in the table and debug output, but breakeven must come from the tool.**
+| # | Long | Short | Net Debit | Max Profit | R:R | Breakeven (from tool) | Expected Nifty50 | Breakeven Distance | Breakeven > Expected Nifty50? | Status |
+|---|------|-------|-----------|------------|-----|----------------------|------------------|--------------------|--------------------------|--------|
+| 1 | [X]  | [Y]   | ₹[Amount] | ₹[Amount]  |[X:1]| [ToolValue]          | [ExpNifty]       | [ToolValue-ExpNifty] | YES/NO                   | [Status] |
+| 2 | [X]  | [Y]   | ₹[Amount] | ₹[Amount]  |[X:1]| [ToolValue]          | [ExpNifty]       | [ToolValue-ExpNifty] | YES/NO                   | [Status] |
+| 3 | [X]  | [Y]   | ₹[Amount] | ₹[Amount]  |[X:1]| [ToolValue]          | [ExpNifty]       | [ToolValue-ExpNifty] | YES/NO                   | [Status] |
+| 4 | [X]  | [Y]   | ₹[Amount] | ₹[Amount]  |[X:1]| [ToolValue]          | [ExpNifty]       | [ToolValue-ExpNifty] | YES/NO                   | [Status] |
+| 5 | [X]  | [Y]   | ₹[Amount] | ₹[Amount]  |[X:1]| [ToolValue]          | [ExpNifty]       | [ToolValue-ExpNifty] | YES/NO                   | [Status] |
 
 **SORTING EXPLANATION:**
-- **Primary Group**: breakeven > Expected Nifty → Sort by breakeven CLOSEST to Expected Nifty → Reward/Risk (desc) → Net Debit (asc)
+- **Primary Group**: breakeven > Expected Nifty → Reward/Risk (desc) → Net Debit (asc)
 - **Secondary Group**: breakeven ≤ Expected Nifty → Sort by breakeven (descending)
 - **Selection**: Pick TOP 3 from this sorted order
 - **LOGIC**: Optimal positioning (breakeven near expected Nifty), then profit (high Reward/Risk), then efficiency (low cost)
